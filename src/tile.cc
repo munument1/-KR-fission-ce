@@ -388,28 +388,28 @@ int tileInit(TileData** squareGrid, int squareGridWidth, int squareGridHeight, i
     } while (v11 != 64);
 
     bufferFill(_tile_grid, 32, 16, 32, 0);
-    bufferDrawLine(_tile_grid, 32, 16, 0, 31, 4, _colorTable[4228]);
-    bufferDrawLine(_tile_grid, 32, 31, 4, 31, 12, _colorTable[4228]);
-    bufferDrawLine(_tile_grid, 32, 31, 12, 16, 15, _colorTable[4228]);
-    bufferDrawLine(_tile_grid, 32, 0, 12, 16, 15, _colorTable[4228]);
-    bufferDrawLine(_tile_grid, 32, 0, 4, 0, 12, _colorTable[4228]);
-    bufferDrawLine(_tile_grid, 32, 16, 0, 0, 4, _colorTable[4228]);
+    bufferDrawLine(_tile_grid, 32, 16, 0, 31, 4, _colorTable[COL_ALMOST_BLACK]);
+    bufferDrawLine(_tile_grid, 32, 31, 4, 31, 12, _colorTable[COL_ALMOST_BLACK]);
+    bufferDrawLine(_tile_grid, 32, 31, 12, 16, 15, _colorTable[COL_ALMOST_BLACK]);
+    bufferDrawLine(_tile_grid, 32, 0, 12, 16, 15, _colorTable[COL_ALMOST_BLACK]);
+    bufferDrawLine(_tile_grid, 32, 0, 4, 0, 12, _colorTable[COL_ALMOST_BLACK]);
+    bufferDrawLine(_tile_grid, 32, 16, 0, 0, 4, _colorTable[COL_ALMOST_BLACK]);
 
     bufferFill(_tile_grid_occupied, 32, 16, 32, 0);
-    bufferDrawLine(_tile_grid_occupied, 32, 16, 0, 31, 4, _colorTable[31]);
-    bufferDrawLine(_tile_grid_occupied, 32, 31, 4, 31, 12, _colorTable[31]);
-    bufferDrawLine(_tile_grid_occupied, 32, 31, 12, 16, 15, _colorTable[31]);
-    bufferDrawLine(_tile_grid_occupied, 32, 0, 12, 16, 15, _colorTable[31]);
-    bufferDrawLine(_tile_grid_occupied, 32, 0, 4, 0, 12, _colorTable[31]);
-    bufferDrawLine(_tile_grid_occupied, 32, 16, 0, 0, 4, _colorTable[31]);
+    bufferDrawLine(_tile_grid_occupied, 32, 16, 0, 31, 4, _colorTable[COL_BRIGHT_BLUE]);
+    bufferDrawLine(_tile_grid_occupied, 32, 31, 4, 31, 12, _colorTable[COL_BRIGHT_BLUE]);
+    bufferDrawLine(_tile_grid_occupied, 32, 31, 12, 16, 15, _colorTable[COL_BRIGHT_BLUE]);
+    bufferDrawLine(_tile_grid_occupied, 32, 0, 12, 16, 15, _colorTable[COL_BRIGHT_BLUE]);
+    bufferDrawLine(_tile_grid_occupied, 32, 0, 4, 0, 12, _colorTable[COL_BRIGHT_BLUE]);
+    bufferDrawLine(_tile_grid_occupied, 32, 16, 0, 0, 4, _colorTable[COL_BRIGHT_BLUE]);
 
     bufferFill(_tile_grid_blocked, 32, 16, 32, 0);
-    bufferDrawLine(_tile_grid_blocked, 32, 16, 0, 31, 4, _colorTable[31744]);
-    bufferDrawLine(_tile_grid_blocked, 32, 31, 4, 31, 12, _colorTable[31744]);
-    bufferDrawLine(_tile_grid_blocked, 32, 31, 12, 16, 15, _colorTable[31744]);
-    bufferDrawLine(_tile_grid_blocked, 32, 0, 12, 16, 15, _colorTable[31744]);
-    bufferDrawLine(_tile_grid_blocked, 32, 0, 4, 0, 12, _colorTable[31744]);
-    bufferDrawLine(_tile_grid_blocked, 32, 16, 0, 0, 4, _colorTable[31744]);
+    bufferDrawLine(_tile_grid_blocked, 32, 16, 0, 31, 4, _colorTable[COL_PURE_RED]);
+    bufferDrawLine(_tile_grid_blocked, 32, 31, 4, 31, 12, _colorTable[COL_PURE_RED]);
+    bufferDrawLine(_tile_grid_blocked, 32, 31, 12, 16, 15, _colorTable[COL_PURE_RED]);
+    bufferDrawLine(_tile_grid_blocked, 32, 0, 12, 16, 15, _colorTable[COL_PURE_RED]);
+    bufferDrawLine(_tile_grid_blocked, 32, 0, 4, 0, 12, _colorTable[COL_PURE_RED]);
+    bufferDrawLine(_tile_grid_blocked, 32, 16, 0, 0, 4, _colorTable[COL_PURE_RED]);
 
     for (v20 = 0; v20 < 16; v20++) {
         v21 = v20 * 32;
@@ -432,7 +432,7 @@ int tileInit(TileData** squareGrid, int squareGridWidth, int squareGridHeight, i
             } while (v25 < 32 && _tile_grid_blocked[v24] == 0);
         }
 
-        bufferDrawLine(_tile_grid_blocked, 32, v25, v20, v22, v20, _colorTable[31744]);
+        bufferDrawLine(_tile_grid_blocked, 32, v25, v20, v22, v20, _colorTable[COL_PURE_RED]);
     }
 
     // In order to calculate scroll borders correctly we need to pretend we're
@@ -457,6 +457,19 @@ int tileInit(TileData** squareGrid, int squareGridWidth, int squareGridHeight, i
     }
 
     return 0;
+}
+
+void tileSetViewport(unsigned char* buffer, int width, int height, int pitch)
+{
+    gTileWindowBuffer = buffer;
+    gTileWindowWidth = width;
+    gTileWindowHeight = height;
+    gTileWindowPitch = pitch;
+
+    gTileWindowRect.left = 0;
+    gTileWindowRect.top = 0;
+    gTileWindowRect.right = width - 1;
+    gTileWindowRect.bottom = height - 1;
 }
 
 // 0x4B11E4
@@ -1181,22 +1194,13 @@ void tileRenderRoofsInRect(Rect* rect, int elevation)
     squareTileScreenToCoordRoof(rect->left, rect->bottom, elevation, &maxX, &temp);
     squareTileScreenToCoordRoof(rect->right, rect->bottom, elevation, &temp, &maxY);
 
-    if (minX < 0) {
-        minX = 0;
-    }
-
-    if (minX >= gSquareGridWidth) {
-        minX = gSquareGridWidth - 1;
-    }
-
-    if (minY < 0) {
-        minY = 0;
-    }
-
-    // FIXME: Probably a bug - testing X, then changing Y.
-    if (minX >= gSquareGridHeight) {
-        minY = gSquareGridHeight - 1;
-    }
+    if (minX < 0) minX = 0;
+    if (minY < 0) minY = 0;
+    if (maxX < 0) return;
+    if (maxY < 0) return;
+    if (maxX >= gSquareGridWidth) maxX = gSquareGridWidth - 1;
+    if (maxY >= gSquareGridHeight) maxY = gSquareGridHeight - 1;
+    if (minX > maxX || minY > maxY) return;
 
     int light = lightGetAmbientIntensity();
 
@@ -1394,21 +1398,13 @@ void tileRenderFloorsInRect(Rect* rect, int elevation)
     squareTileScreenToCoord(rect->left, rect->bottom, elevation, &maxX, &temp);
     squareTileScreenToCoord(rect->right, rect->bottom, elevation, &temp, &maxY);
 
-    if (minX < 0) {
-        minX = 0;
-    }
-
-    if (minX >= gSquareGridWidth) {
-        minX = gSquareGridWidth - 1;
-    }
-
-    if (minY < 0) {
-        minY = 0;
-    }
-
-    if (minX >= gSquareGridHeight) {
-        minY = gSquareGridHeight - 1;
-    }
+    if (minX < 0) minX = 0;
+    if (minY < 0) minY = 0;
+    if (maxX < 0) return;
+    if (maxY < 0) return;
+    if (maxX >= gSquareGridWidth) maxX = gSquareGridWidth - 1;
+    if (maxY >= gSquareGridHeight) maxY = gSquareGridHeight - 1;
+    if (minX > maxX || minY > maxY) return;
 
     lightGetAmbientIntensity();
 

@@ -18,6 +18,7 @@
 #include "game_mouse.h"
 #include "game_movie.h"
 #include "game_sound.h"
+#include "game_version.h"
 #include "input.h"
 #include "interface.h"
 #include "kb.h"
@@ -61,8 +62,11 @@ static void _main_death_voiceover_callback();
 static int _mainDeathGrabTextFile(const char* fileName, char* dest);
 static int _mainDeathWordWrap(char* text, int width, short* beginnings, short* count);
 
-// 0x5194C8
+// Fallout 2's opening location. Arroyo temple entrance.
 static char _mainMap[] = "artemple.map";
+
+// Fallout 1's opening location. Vault 13 entrance.
+static char _mainMapFallout1[] = "v13ent.map";
 
 // 0x5194D8
 static int _main_game_paused = 0;
@@ -86,9 +90,9 @@ int falloutMain(int argc, char** argv)
 
     // skip opening movies form settings
     if (settings.enhancements.skip_opening_movies < 1 || settings.enhancements.strict_vanilla) {
-        gameMoviePlay(MOVIE_IPLOGO, GAME_MOVIE_FADE_IN);
-        gameMoviePlay(MOVIE_INTRO, 0);
-        gameMoviePlay(MOVIE_CREDITS, 0);
+        gameMoviePlay(gMovieIplogo, GAME_MOVIE_FADE_IN);
+        gameMoviePlay(gMovieIntro, 0);
+        gameMoviePlay(gMovieCredits, 0);
     }
     // restores black for fade to main menu when skipping movies (which do it)
     paletteSetEntries(gPaletteBlack);
@@ -107,20 +111,21 @@ int falloutMain(int argc, char** argv)
             switch (mainMenuRc) {
             case MAIN_MENU_INTRO:
                 mainMenuWindowHide(true);
-                gameMoviePlay(MOVIE_INTRO, GAME_MOVIE_STOP_MUSIC);
-                gameMoviePlay(MOVIE_CREDITS, 0);
+                gameMoviePlay(gMovieIntro, GAME_MOVIE_STOP_MUSIC);
+                gameMoviePlay(gMovieCredits, 0);
                 break;
             case MAIN_MENU_NEW_GAME:
                 mainMenuWindowHide(true);
                 mainMenuWindowFree();
                 if (characterSelectorOpen() == 2) {
-                    gameMoviePlay(MOVIE_ELDER, GAME_MOVIE_STOP_MUSIC);
+                    gameMoviePlay(gMovieNewGameBriefing, GAME_MOVIE_STOP_MUSIC);
                     randomSeedPrerandom(-1);
 
                     // modConfig: Override starting map.
+                    const char* defaultMap = IS_FALLOUT_1() ? _mainMapFallout1 : _mainMap;
                     const char* mapName = settings.mod_settings.starting_map.empty() ? nullptr : settings.mod_settings.starting_map.c_str();
 
-                    char* mapNameCopy = compat_strdup(mapName != nullptr ? mapName : _mainMap);
+                    char* mapNameCopy = compat_strdup(mapName != nullptr ? mapName : defaultMap);
                     _main_load_new(mapNameCopy);
                     free(mapNameCopy);
 
@@ -153,7 +158,7 @@ int falloutMain(int argc, char** argv)
                 mainMenuWindowHide(true);
                 mainMenuWindowFree();
                 if (1) {
-                    int win = windowCreate(0, 0, screenGetWidth(), screenGetHeight(), _colorTable[0], WINDOW_MODAL | WINDOW_MOVE_ON_TOP);
+                    int win = windowCreate(0, 0, screenGetWidth(), screenGetHeight(), _colorTable[COL_BLACK], WINDOW_MODAL | WINDOW_MOVE_ON_TOP);
 
                     main_loadgame_new(); // NOTE: Uninline.
 
@@ -200,7 +205,7 @@ int falloutMain(int argc, char** argv)
                 // FALLTHROUGH
             case MAIN_MENU_SCREENSAVER:
                 mainMenuWindowHide(true);
-                gameMoviePlay(MOVIE_INTRO, GAME_MOVIE_PAUSE_MUSIC);
+                gameMoviePlay(gMovieIntro, GAME_MOVIE_PAUSE_MUSIC);
                 break;
             case MAIN_MENU_OPTIONS:
                 mainMenuWindowHide(true);
@@ -290,7 +295,7 @@ static int _main_load_new(char* mapFileName)
 
     resizeContent(screenGetWidth(), screenGetHeight(), true);
 
-    int win = windowCreate(0, 0, screenGetWidth(), screenGetHeight(), _colorTable[0], WINDOW_MODAL | WINDOW_MOVE_ON_TOP);
+    int win = windowCreate(0, 0, screenGetWidth(), screenGetHeight(), _colorTable[COL_BLACK], WINDOW_MODAL | WINDOW_MOVE_ON_TOP);
     windowRefresh(win);
 
     colorPaletteLoad("color.pal");
@@ -357,6 +362,12 @@ static void mainLoop()
         sfall_gl_scr_process_main();
 
         bool handled = automapHandleKey(keyCode);
+        if (!handled) {
+            // Check if the click was on the multidex map
+            if (multidexHandleMouse()) {
+                handled = true;
+            }
+        }
         if (!handled) {
             gameHandleKey(keyCode, false);
         }
@@ -475,7 +486,7 @@ static void showDeath()
                         bufferFill(p - (game_width - 38), game_width - 76, fontGetLineHeight() * count + 2, game_width, 0);
                         p += 40;
                         for (int index = 0; index < count; index++) {
-                            fontDrawText(p, text + beginnings[index], game_width - 80, game_width, _colorTable[32767]);
+                            fontDrawText(p, text + beginnings[index], game_width - 80, game_width, _colorTable[COL_WHITE]);
                             p += game_width * fontGetLineHeight();
                         }
                     }

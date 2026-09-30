@@ -15,6 +15,7 @@
 #include "draw.h"
 #include "game.h"
 #include "game_sound.h"
+#include "game_version.h"
 #include "input.h"
 #include "kb.h"
 #include "memory.h"
@@ -205,6 +206,15 @@ void characterSelectorWriteDefaultOffsetsToConfig(bool isWidescreen, const Chara
     configSetInt(&gGameConfig, section, "bioMaxY", defaults->bioMaxY);
 }
 
+static const char* safeName(const char* s, const char* what, int index)
+{
+    if (s == nullptr) {
+        fprintf(stderr, "[CS] NULL name from %s (index=%d)\n", what, index);
+        return "(null)";
+    }
+    return s;
+}
+
 // 0x4A71D0
 int characterSelectorOpen()
 {
@@ -340,7 +350,7 @@ static bool characterSelectorWindowInit()
         characterSelectorWindowY,
         gOffsets.width,
         gOffsets.height,
-        _colorTable[0],
+        _colorTable[COL_BLACK],
         0);
     if (gCharacterSelectorWindow == -1) {
         return characterSelectorWindowFatalError(false);
@@ -672,18 +682,78 @@ static bool characterSelectorWindowRenderFace()
 {
     bool success = false;
 
+    // F1 ships no widescreen art variants for now. Request the base fid in F1
+    // mode regardless of resolution so we don't ask the cache for a
+    // frame that doesn't exist in the F1 dat.
+    bool widescreenVariant = !IS_FALLOUT_1() && gameIsWidescreen();
+
     FrmImage faceFrmImage;
-    int faceFid = artGetFidWithVariant(OBJ_TYPE_INTERFACE, gCustomPremadeCharacterDescriptions[gCurrentPremadeCharacter].face, gameIsWidescreen());
+    int faceFid = artGetFidWithVariant(OBJ_TYPE_INTERFACE,
+        gCustomPremadeCharacterDescriptions[gCurrentPremadeCharacter].face,
+        widescreenVariant);
+
     if (faceFrmImage.lock(faceFid)) {
         unsigned char* data = faceFrmImage.getData();
-        if (data != nullptr) {
+        if (data != NULL) {
             int width = faceFrmImage.getWidth();
             int height = faceFrmImage.getHeight();
-            // Use offset-based position
-            int offset = gOffsets.width * gOffsets.faceY + gOffsets.faceX;
-            blitBufferToBufferTrans(data, width, height, width,
-                gCharacterSelectorWindowBuffer + offset,
-                gOffsets.width);
+
+            if (IS_FALLOUT_1()) {
+                // Base the position off the Fallout2 values
+                int anchorX = gOffsets.faceX + 123;
+                int anchorY = gOffsets.faceY + 217;
+
+                // Widescreen-only nudge. 0,0 means "same relative
+                // position as 640"; tweak these to shift the F1 portrait
+                // on the 800 layout without touching the 640 defaults.
+                int wsFaceDX = 35;
+                int wsFaceDY = 0;
+                if (gameIsWidescreen()) {
+                    anchorX += wsFaceDX;
+                    anchorY += wsFaceDY;
+                }
+
+                int dstX = anchorX - (width / 2);
+                int dstY = anchorY - height;
+
+                // Odd-row scanline mask 'mutates' pixels. F1 got away with
+                // in-place mutation because it locked/unlocked per visit;
+                // the FISSION art cache is shared across visits and
+                // resolutions, so work on a scratch copy.
+                unsigned char* scratch = (unsigned char*)internal_malloc(width * height);
+                if (scratch != NULL) {
+                    memcpy(scratch, data, width * height);
+                    for (int y = 1; y < height; y += 2) {
+                        memset(scratch + y * width, 0, width);
+                    }
+
+                    blitBufferToBufferTrans(scratch, width, height, width,
+                        gCharacterSelectorWindowBuffer + gOffsets.width * dstY + dstX,
+                        gOffsets.width);
+
+                    internal_free(scratch);
+                }
+
+                // VID serial number, 12px below the portrait's bottom
+                // edge and centered on the same anchor. Lands on row 252
+                // at 640, matching F1.
+                const char* vid = gCustomPremadeCharacterDescriptions[gCurrentPremadeCharacter].vid;
+                if (vid != NULL && vid[0] != '\0') {
+                    int oldFont = fontGetCurrent();
+                    fontSetCurrent(101);
+
+                    int idWidth = fontGetStringWidth(vid);
+                    fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * (anchorY + 12) + anchorX - idWidth / 2,
+                        vid, idWidth, gOffsets.width, _colorTable[992]);
+
+                    fontSetCurrent(oldFont);
+                }
+            } else {
+                blitBufferToBufferTrans(data, width, height, width,
+                    gCharacterSelectorWindowBuffer + gOffsets.width * gOffsets.faceY + gOffsets.faceX,
+                    gOffsets.width);
+            }
+
             success = true;
         }
         faceFrmImage.unlock();
@@ -694,7 +764,7 @@ static bool characterSelectorWindowRenderFace()
 
 static bool characterSelectorWindowRenderStats()
 {
-    char* str;
+    const char* str;
     char text[260];
     int length;
     int value;
@@ -714,7 +784,7 @@ static bool characterSelectorWindowRenderStats()
 
     length = fontGetStringWidth(text);
     fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.nameMidX - (length / 2),
-        text, 160, gOffsets.width, _colorTable[992]);
+        text, 160, gOffsets.width, _colorTable[COL_LIME_GREEN]);
 
     // STRENGTH
     y += vh + vh + vh;
@@ -726,14 +796,16 @@ static bool characterSelectorWindowRenderStats()
 
     length = fontGetStringWidth(text);
     fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.primaryStatMidX - length,
-        text, length, gOffsets.width, _colorTable[992]);
+        text, length, gOffsets.width, _colorTable[COL_LIME_GREEN]);
 
-    str = statGetValueDescription(value);
+    // str = statGetValueDescription(value);
+    str = safeName(statGetValueDescription(value), "statGetValueDescription", value);
+
     snprintf(text, sizeof(text), "  %s", str);
 
     length = fontGetStringWidth(text);
     fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.primaryStatMidX,
-        text, length, gOffsets.width, _colorTable[992]);
+        text, length, gOffsets.width, _colorTable[COL_LIME_GREEN]);
 
     // PERCEPTION
     y += vh;
@@ -745,14 +817,16 @@ static bool characterSelectorWindowRenderStats()
 
     length = fontGetStringWidth(text);
     fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.primaryStatMidX - length,
-        text, length, gOffsets.width, _colorTable[992]);
+        text, length, gOffsets.width, _colorTable[COL_LIME_GREEN]);
 
-    str = statGetValueDescription(value);
+    // str = statGetValueDescription(value);
+    str = safeName(statGetValueDescription(value), "statGetValueDescription", value);
+
     snprintf(text, sizeof(text), "  %s", str);
 
     length = fontGetStringWidth(text);
     fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.primaryStatMidX,
-        text, length, gOffsets.width, _colorTable[992]);
+        text, length, gOffsets.width, _colorTable[COL_LIME_GREEN]);
 
     // ENDURANCE
     y += vh;
@@ -764,14 +838,16 @@ static bool characterSelectorWindowRenderStats()
 
     length = fontGetStringWidth(text);
     fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.primaryStatMidX - length,
-        text, length, gOffsets.width, _colorTable[992]);
+        text, length, gOffsets.width, _colorTable[COL_LIME_GREEN]);
 
-    str = statGetValueDescription(value);
+    // str = statGetValueDescription(value);
+    str = safeName(statGetValueDescription(value), "statGetValueDescription", value);
+
     snprintf(text, sizeof(text), "  %s", str);
 
     length = fontGetStringWidth(text);
     fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.primaryStatMidX,
-        text, length, gOffsets.width, _colorTable[992]);
+        text, length, gOffsets.width, _colorTable[COL_LIME_GREEN]);
 
     // CHARISMA
     y += vh;
@@ -783,14 +859,16 @@ static bool characterSelectorWindowRenderStats()
 
     length = fontGetStringWidth(text);
     fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.primaryStatMidX - length,
-        text, length, gOffsets.width, _colorTable[992]);
+        text, length, gOffsets.width, _colorTable[COL_LIME_GREEN]);
 
-    str = statGetValueDescription(value);
+    // str = statGetValueDescription(value);
+    str = safeName(statGetValueDescription(value), "statGetValueDescription", value);
+
     snprintf(text, sizeof(text), "  %s", str);
 
     length = fontGetStringWidth(text);
     fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.primaryStatMidX,
-        text, length, gOffsets.width, _colorTable[992]);
+        text, length, gOffsets.width, _colorTable[COL_LIME_GREEN]);
 
     // INTELLIGENCE
     y += vh;
@@ -802,14 +880,16 @@ static bool characterSelectorWindowRenderStats()
 
     length = fontGetStringWidth(text);
     fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.primaryStatMidX - length,
-        text, length, gOffsets.width, _colorTable[992]);
+        text, length, gOffsets.width, _colorTable[COL_LIME_GREEN]);
 
-    str = statGetValueDescription(value);
+    // str = statGetValueDescription(value);
+    str = safeName(statGetValueDescription(value), "statGetValueDescription", value);
+
     snprintf(text, sizeof(text), "  %s", str);
 
     length = fontGetStringWidth(text);
     fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.primaryStatMidX,
-        text, length, gOffsets.width, _colorTable[992]);
+        text, length, gOffsets.width, _colorTable[COL_LIME_GREEN]);
 
     // AGILITY
     y += vh;
@@ -821,14 +901,16 @@ static bool characterSelectorWindowRenderStats()
 
     length = fontGetStringWidth(text);
     fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.primaryStatMidX - length,
-        text, length, gOffsets.width, _colorTable[992]);
+        text, length, gOffsets.width, _colorTable[COL_LIME_GREEN]);
 
-    str = statGetValueDescription(value);
+    // str = statGetValueDescription(value);
+    str = safeName(statGetValueDescription(value), "statGetValueDescription", value);
+
     snprintf(text, sizeof(text), "  %s", str);
 
     length = fontGetStringWidth(text);
     fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.primaryStatMidX,
-        text, length, gOffsets.width, _colorTable[992]);
+        text, length, gOffsets.width, _colorTable[COL_LIME_GREEN]);
 
     // LUCK
     y += vh;
@@ -840,14 +922,16 @@ static bool characterSelectorWindowRenderStats()
 
     length = fontGetStringWidth(text);
     fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.primaryStatMidX - length,
-        text, length, gOffsets.width, _colorTable[992]);
+        text, length, gOffsets.width, _colorTable[COL_LIME_GREEN]);
 
-    str = statGetValueDescription(value);
+    // str = statGetValueDescription(value);
+    str = safeName(statGetValueDescription(value), "statGetValueDescription", value);
+
     snprintf(text, sizeof(text), "  %s", str);
 
     length = fontGetStringWidth(text);
     fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.primaryStatMidX,
-        text, length, gOffsets.width, _colorTable[992]);
+        text, length, gOffsets.width, _colorTable[COL_LIME_GREEN]);
 
     y += vh; // blank line
 
@@ -862,7 +946,7 @@ static bool characterSelectorWindowRenderStats()
 
     length = fontGetStringWidth(text);
     fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.secondaryStatMidX - length,
-        text, length, gOffsets.width, _colorTable[992]);
+        text, length, gOffsets.width, _colorTable[COL_LIME_GREEN]);
 
     value = critterGetStat(gDude, STAT_MAXIMUM_HIT_POINTS);
     snprintf(text, sizeof(text), " %d/%d", critterGetHitPoints(gDude), value);
@@ -870,7 +954,7 @@ static bool characterSelectorWindowRenderStats()
     length = fontGetStringWidth(text);
     // Use offset-based position
     fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.secondaryStatMidX,
-        text, length, gOffsets.width, _colorTable[992]);
+        text, length, gOffsets.width, _colorTable[COL_LIME_GREEN]);
 
     // ARMOR CLASS
     y += vh;
@@ -880,14 +964,14 @@ static bool characterSelectorWindowRenderStats()
 
     length = fontGetStringWidth(text);
     fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.secondaryStatMidX - length,
-        text, length, gOffsets.width, _colorTable[992]);
+        text, length, gOffsets.width, _colorTable[COL_LIME_GREEN]);
 
     value = critterGetStat(gDude, STAT_ARMOR_CLASS);
     snprintf(text, sizeof(text), " %d", value);
 
     length = fontGetStringWidth(text);
     fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.secondaryStatMidX,
-        text, length, gOffsets.width, _colorTable[992]);
+        text, length, gOffsets.width, _colorTable[COL_LIME_GREEN]);
 
     // ACTION POINTS
     y += vh;
@@ -900,14 +984,14 @@ static bool characterSelectorWindowRenderStats()
 
     length = fontGetStringWidth(text);
     fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.secondaryStatMidX - length,
-        text, length, gOffsets.width, _colorTable[992]);
+        text, length, gOffsets.width, _colorTable[COL_LIME_GREEN]);
 
     value = critterGetStat(gDude, STAT_MAXIMUM_ACTION_POINTS);
     snprintf(text, sizeof(text), " %d", value);
 
     length = fontGetStringWidth(text);
     fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.secondaryStatMidX,
-        text, length, gOffsets.width, _colorTable[992]);
+        text, length, gOffsets.width, _colorTable[COL_LIME_GREEN]);
 
     // MELEE DAMAGE
     y += vh;
@@ -917,14 +1001,14 @@ static bool characterSelectorWindowRenderStats()
 
     length = fontGetStringWidth(text);
     fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.secondaryStatMidX - length,
-        text, length, gOffsets.width, _colorTable[992]);
+        text, length, gOffsets.width, _colorTable[COL_LIME_GREEN]);
 
     value = critterGetStat(gDude, STAT_MELEE_DAMAGE);
     snprintf(text, sizeof(text), " %d", value);
 
     length = fontGetStringWidth(text);
     fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.secondaryStatMidX,
-        text, length, gOffsets.width, _colorTable[992]);
+        text, length, gOffsets.width, _colorTable[COL_LIME_GREEN]);
 
     y += vh; // blank line
 
@@ -935,19 +1019,21 @@ static bool characterSelectorWindowRenderStats()
     for (int index = 0; index < DEFAULT_TAGGED_SKILLS; index++) {
         y += vh;
 
-        str = skillGetName(skills[index]);
+        str = safeName(skillGetName(skills[index]), "skillGetName", skills[index]);
+        strcpy(text, str);
+        // str = skillGetName(skills[index]);
         strcpy(text, str);
 
         length = fontGetStringWidth(text);
         fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.secondaryStatMidX - length,
-            text, length, gOffsets.width, _colorTable[992]);
+            text, length, gOffsets.width, _colorTable[COL_LIME_GREEN]);
 
         value = skillGetValue(gDude, skills[index]);
         snprintf(text, sizeof(text), " %d%%", value);
 
         length = fontGetStringWidth(text);
         fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.secondaryStatMidX,
-            text, length, gOffsets.width, _colorTable[992]);
+            text, length, gOffsets.width, _colorTable[COL_LIME_GREEN]);
     }
 
     // TRAITS
@@ -957,12 +1043,14 @@ static bool characterSelectorWindowRenderStats()
     for (int index = 0; index < TRAITS_MAX_SELECTED_COUNT; index++) {
         y += vh;
 
-        str = traitGetName(traits[index]);
+        str = safeName(traitGetName(traits[index]), "traitGetName", traits[index]);
+        strcpy(text, str);
+        // str = traitGetName(traits[index]);
         strcpy(text, str);
 
         length = fontGetStringWidth(text);
         fontDrawText(gCharacterSelectorWindowBuffer + gOffsets.width * y + gOffsets.secondaryStatMidX - length,
-            text, length, gOffsets.width, _colorTable[992]);
+            text, length, gOffsets.width, _colorTable[COL_LIME_GREEN]);
     }
 
     fontSetCurrent(oldFont);
@@ -991,7 +1079,7 @@ static bool characterSelectorWindowRenderBio()
                 string,
                 gOffsets.width - gOffsets.bioX,
                 gOffsets.width,
-                _colorTable[992]);
+                _colorTable[COL_LIME_GREEN]);
             y += lineHeight;
         }
 
