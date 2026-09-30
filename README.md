@@ -15,7 +15,7 @@ Fallout: F.I.S.S.I.O.N.은 [Fallout2-CE](https://github.com/alexbatalov/fallout2
 
 ## 한국어 호환성 포크
 
-이 포크에는 Windows 환경에서 한국어를 사용하기 위한 실험적인 호환성 작업이 포함되어 있습니다. 레거시 코드페이지 설정과 TTF 폰트 렌더링 지원을 구성할 수 있습니다.
+이 포크에는 Windows 환경에서 한국어를 사용하기 위한 호환성 작업이 포함되어 있습니다. 현재 한국어 릴리즈는 Fission CE `beta-0.9.7.4`를 기준으로 하며, 레거시 코드페이지/GDI 및 TTF 폰트 렌더링과 한국어 UI 리소스를 포함합니다.
 
 - 한국어 버전 가이드: [KOR_README.md](KOR_README.md)
 - 한국어 호환성 참고 사항: [KOREAN_COMPATIBILITY.md](KOREAN_COMPATIBILITY.md)
@@ -29,7 +29,7 @@ Fallout: F.I.S.S.I.O.N.은 [Fallout2-CE](https://github.com/alexbatalov/fallout2
 - **진정한 크로스 플랫폼 지원**: Windows, macOS, Linux, iOS, Android, Web
 - **와이드스크린 및 고해상도 스케일링**: 픽셀 단위의 화면비 보존
 - **모듈식 커스터마이징 시스템**: 커뮤니티 모드를 자연스럽게 연동
-- **원본 Fallout 1 & 2 애셋과 100% 호환**: 아직 Fallout 1은 실행할 수 없습니다
+- **원본 Fallout 1 & 2 애셋과 100% 호환**: Fission CE 0.9.7 계열부터 Fallout 1 실행 지원
 - **미래 확장성**: 새 콘텐츠와 Fallout 2 통합을 쉽게 확장할 수 있는 구조
 
 ---
@@ -70,19 +70,18 @@ Fallout: F.I.S.S.I.O.N.은 [Fallout2-CE](https://github.com/alexbatalov/fallout2
 ## 모드/게임 호환성
 
 **완전히 지원됨**:
+- Fallout 1
 - Fallout 2
 - Fallout: Nevada
 - Fallout: Sonora
 
 **아직 지원되지 않으며, 앞으로도 지원되지 않을 수 있음**:
-- Fallout 1
 - Fallout Nevada 또는 Sonora 리팩 버전
 - Restoration Project
 - Fallout: Et Tu
 - Olympus 2207
 - Resurrection, Yesterday (미검증)
 
-Fallout 1 전체 지원이 필요하다면 [Fallout1-CE](https://github.com/alexbatalov/fallout1-ce)를 확인하세요.
 
 ---
 
@@ -90,19 +89,20 @@ Fallout 1 전체 지원이 필요하다면 [Fallout1-CE](https://github.com/alex
 
 ### 사전 준비
 
-**Fallout 2** 정품(GOG, Steam 또는 Epic Games 버전)을 보유하고 있어야 하며, 게임이 완전히 설치되어 있어야 합니다. F.I.S.S.I.O.N.은 `Fallout2.exe`를 대체하는 실행 파일이며, 완전한 게임 데이터가 필요합니다.
+**Fallout 1 또는 Fallout 2** 정품 설치본이 필요합니다. F.I.S.S.I.O.N.은 원본 실행 파일을 대체하며, 실행을 위해 해당 게임의 완전한 데이터가 필요합니다.
 
 **지원되는 기본 설치 환경:**
+- **Vanilla Fallout 1** - 클래식 원본 게임
 - **Vanilla Fallout 2** - 클래식 원본 게임
 - **Fallout: Nevada** - 러시아어 토탈 컨버전 모드
 - **Fallout: Sonora** - 러시아어 토탈 컨버전 모드
 
 ### 빠른 설치
 
-1. **정상 작동하는 바닐라 Fallout 2 설치본이 있는지 확인합니다.**
+1. **지원되는 Fallout 1 또는 Fallout 2 설치본이 정상 작동하는지 확인합니다.**
 2. 최신 [F.I.S.S.I.O.N. 릴리스](https://github.com/cambragol/fission-ce/releases)를 **다운로드**합니다.
 3. F.I.S.S.I.O.N. 파일을 Fallout 2 폴더에 **압축 해제**합니다.
-4. 원본 실행 파일 대신 `fallout-fission.exe`(Windows) 또는 `fallout-fission.app`(macOS)를 **실행**합니다.
+4. 한국어 Windows 빌드에서는 `fallout-fission-x64.exe`를 **실행**합니다.
 
 이것으로 충분합니다. F.I.S.S.I.O.N.은 기존 콘텐츠를 자동으로 불러오고 향상된 모딩 기능을 적용합니다.
 
@@ -115,7 +115,7 @@ Fallout 1 전체 지원이 필요하다면 [Fallout1-CE](https://github.com/alex
 # 1. Fallout 2 폴더로 이동합니다. 일반적인 경로는 다음과 같습니다.
 cd "C:\Program Files (x86)\Steam\steamapps\common\Fallout 2"
 # 2. 이 위치에 F.I.S.S.I.O.N. 파일을 압축 해제합니다.
-# 3. fallout-fission.exe를 실행합니다.
+# 3. fallout-fission-x64.exe를 실행합니다.
 ```
 
 #### macOS
@@ -189,6 +189,11 @@ InventoryColumns=1
 MassHighlight=1
 Minimap=0
 NpcArmor=1
+GreenScreens=0
+InventoryFilter=0
+DisplayWeight=0
+CompanionInventory=0
+VockFloats=0
 NumbersInDialogue=0
 RemoveCriticalTimelimits=0
 SkipOpeningMovies=2

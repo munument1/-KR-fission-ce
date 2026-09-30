@@ -5,7 +5,7 @@
 # Fallout: F.I.S.S.I.O.N.
 *Flexible Isometric Simulation System for Interactive Open‑world Nuclear‑roleplaying (상호작용형 오픈월드 핵-롤플레잉을 위한 유연한 등각 투영 시뮬레이션 시스템)*
 
-Fallout: F.I.S.S.I.O.N.은 [Fallout2-CE](https://github.com/alexbatalov/fallout2-ce)에서 포크된 차세대 크로스 플랫폼 폴아웃 1 & 2 재구현 프로젝트입니다. 원작의 쿼터뷰(등각 투영) 턴제 게임플레이를 그대로 보존하면서 모딩 확장성, 와이드스크린 지원, 그리고 커뮤니티 주도의 진정한 확장성을 더했습니다. Windows, Linux, macOS, Android, iOS는 물론 브라우저에서도 실행할 수 있습니다.
+Fallout: F.I.S.S.I.O.N.은 [Fallout2-CE](https://github.com/alexbatalov/fallout2-ce)에서 포크된 차세대 크로스 플랫폼 폴아웃 1 & 2 재구현 프로젝트입니다. 원작의 쿼터뷰(등각 투영) 턴제 게임플레이를 그대로 보존하면서 모딩 확장성, 와이드스크린 지원, 그리고 커뮤니티 주도의 진정한 확장성을 더했습니다. Windows, Linux, macOS, Android, iOS는 물론 브라우저에서도 실행할 수 있습니다. 현재 한국어 호환 릴리즈는 Fission CE `beta-0.9.7.4` 기준입니다.
 
 > **F.I.S.S.I.O.N. 엔진 구동**
 > *Flexible(유연하고). Isometric(쿼터뷰 방식의). Simulation(시뮬레이션). System(시스템을 갖춘). Interactive(상호작용형). Open‑world(오픈월드). Nuclear‑roleplay(핵-롤플레잉).*
@@ -19,7 +19,7 @@ Fallout: F.I.S.S.I.O.N.은 [Fallout2-CE](https://github.com/alexbatalov/fallout2
 - **완벽한 크로스 플랫폼 지원**: Windows, macOS, Linux, iOS, Android, Web
 - **와이드스크린 및 고해상도 스케일링** (픽셀 단위의 완벽한 화면비 보존)
 - **모듈형 맞춤 설정 시스템** — 커뮤니티 모드가 매끄럽게 연동됨 (현재 작동 중)
-- **오리지널 폴아웃 1 & 2 에셋과 100% 호환** (아직 폴아웃 1은 구동할 수 없습니다... 언젠가는 되겠죠)
+- **오리지널 폴아웃 1 & 2 에셋과 100% 호환** — Fission CE 0.9.7 계열부터 폴아웃 1 실행 지원
 - **미래 지향적 설계**: 새로운 콘텐츠 및 폴아웃 2 통합을 위한 손쉬운 확장 가능 (현재 작동 중)
 
 ---
@@ -45,37 +45,37 @@ Fallout: F.I.S.S.I.O.N.은 [Fallout2-CE](https://github.com/alexbatalov/fallout2
 ## 모드/게임 호환성
 
 **완전 지원**:
+- 폴아웃 1 (Fallout 1)
 - 폴아웃 2 (Fallout 2)
 - 폴아웃: 네바다 (Fallout: Nevada)
 - 폴아웃: 소노라 (Fallout: Sonora)
 
 **아직 지원되지 않음 (향후에도 미지원 가능성 있음)**:
-- 폴아웃 1 (Fallout 1)
 - 폴아웃 네바다 또는 소노라 '리팩(repack)' 버전
 - 리스토레이션 프로젝트 (Restoration Project)
 - Fallout: Et Tu
 - Olympus 2207
 - Resurrection, Yesterday (테스트되지 않음)
 
-(폴아웃 1을 완전히 지원하는 버전을 찾으신다면 [Fallout1-CE](https://github.com/alexbatalov/fallout1-ce)를 확인하세요.)
 
 ---
 
 ## 설치 방법
 
 ### 사전 요구 사항
-**폴아웃 2** 정품(GOG, Steam 또는 Epic Games 버전)을 소유하고 있어야 하며, 완전히 설치된 상태여야 합니다. F.I.S.S.I.O.N.은 `Fallout2.exe`를 대체하는 스탠드얼론 프로그램이며, 실행을 위해 오리지널 게임 데이터 전체가 필요합니다.
+**폴아웃 1 또는 폴아웃 2** 정품 설치본이 필요합니다. F.I.S.S.I.O.N.은 원본 실행 파일을 대체하는 스탠드얼론 프로그램이며, 실행을 위해 해당 게임의 오리지널 데이터 전체가 필요합니다.
 
 **지원되는 베이스 설치본:**
+- **바닐라 폴아웃 1** - 클래식 원본 게임
 - **바닐라 폴아웃 2** - 클래식 원본 게임
 - **폴아웃: 네바다** - 러시아 토탈 컨버전 모드
 - **폴아웃: 소노라** - 러시아 토탈 컨버전 모드
 
 ### 빠른 설치
-1. **바닐라 폴아웃 2가 정상적으로 설치되어 작동하는지 확인합니다.**
+1. **지원되는 폴아웃 1 또는 폴아웃 2 설치본이 정상적으로 작동하는지 확인합니다.**
 2. 최신 [F.I.S.S.I.O.N. 릴리스](https://github.com/cambragol/fission-ce/releases)를 **다운로드**합니다.
 3. 다운로드한 F.I.S.S.I.O.N. 파일들을 폴아웃 2 설치 폴더에 **압축 해제**합니다.
-4. 원본 실행 파일 대신 `fallout-fission.exe` (Windows) 또는 `fallout-fission.app` (macOS)을 **실행**합니다.
+4. 한국어 Windows 빌드에서는 `fallout-fission-x64.exe`를 **실행**합니다.
 
 끝입니다! F.I.S.S.I.O.N.이 기존 콘텐츠를 자동으로 불러오고 강화된 모딩 기능을 적용합니다.
 
@@ -90,7 +90,7 @@ Fallout: F.I.S.S.I.O.N.은 [Fallout2-CE](https://github.com/alexbatalov/fallout2
 cd "C:\Program Files (x86)\Steam\steamapps\common\Fallout 2"
 
 2. 이 위치에 F.I.S.S.I.O.N. 파일들의 압축을 풉니다.
-3. fallout-fission.exe를 실행합니다.
+3. `fallout-fission-x64.exe`를 실행합니다.
 
 #### macOS
 
@@ -152,6 +152,11 @@ WorldMapTravelMarkers=1
 GaplessMusic=1
 EnhancedBarter=1
 Minimap=1
+GreenScreens=0
+InventoryFilter=0
+DisplayWeight=0
+CompanionInventory=0
+VockFloats=0
 
 와이드스크린 해상도만 적용하고 오리지널 Fallout2.exe와 완전히 동일한 바닐라 경험을 원하신다면 `StrictVanilla=1`로 설정하세요.
 
