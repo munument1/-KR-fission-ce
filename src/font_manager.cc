@@ -226,6 +226,14 @@ static void interfaceFontSetCurrentImpl(int font)
         return;
     }
 
+    // Redirect font 101 to 107 when green monochrome is enabled
+    if (font == 101 && settings.enhancements.green_monochrome && !settings.enhancements.strict_vanilla) {
+        font = 107; // Set to scanline font
+    }
+    if (font == 108) {
+        font = 101; // Override for white fonts to always be non-scanline
+    }
+
     font -= 100;
 
     if (gInterfaceFontDescriptors[font].data != nullptr) {
@@ -345,7 +353,7 @@ static void interfaceFontDrawImpl(unsigned char* buf, const char* string, int le
         color &= ~FONT_SHADOW;
         // NOTE: Other font options preserved. This is different from text font
         // shadows.
-        interfaceFontDrawImpl(buf + pitch + 1, string, length, pitch, (color & ~0xFF) | _colorTable[0]);
+        interfaceFontDrawImpl(buf + pitch + 1, string, length, pitch, (color & ~0xFF) | _colorTable[COL_BLACK]);
     }
 
     unsigned char* palette = _getColorBlendTable(color & 0xFF);

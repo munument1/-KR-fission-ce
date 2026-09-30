@@ -375,6 +375,19 @@ err:
     return -1;
 }
 
+void objectsSetViewport(unsigned char* buffer, int width, int height, int pitch)
+{
+    gObjectsWindowBuffer = buffer;
+    gObjectsWindowWidth = width;
+    gObjectsWindowHeight = height;
+    gObjectsWindowPitch = pitch;
+
+    gObjectsWindowRect.left = 0;
+    gObjectsWindowRect.top = 0;
+    gObjectsWindowRect.right = width - 1;
+    gObjectsWindowRect.bottom = height - 1;
+}
+
 // 0x488A00
 void objectsReset()
 {
@@ -1504,7 +1517,13 @@ int objectSetLocation(Object* obj, int tile, int elevation, Rect* rect)
                 }
 
                 if (rect != nullptr) {
-                    rectUnion(rect, &_scr_size, rect);
+                    // The visible area at high zoom-out is larger than the physical screen.
+                    // We have to invalidate the whole virtual buffer rather than just _scr_size,
+                    // everything visible updates when the roof toggles.
+                    int vw = 0, vh = 0;
+                    mapGetVirtualSize(&vw, &vh);
+                    Rect fullBuffer = { 0, 0, vw - 1, vh - 1 };
+                    rectUnion(rect, &fullBuffer, rect);
                 }
             }
 
@@ -2436,6 +2455,16 @@ bool _obj_occupied(int tile, int elevation)
     return false;
 }
 
+static bool critterHasWalkAnimation(Object* critter)
+{
+    int walkFid = buildFid(FID_TYPE(critter->fid),
+        artGetIndex(critter->fid),
+        ANIM_WALK,
+        0,
+        critter->rotation + 1);
+    return artExists(walkFid);
+}
+
 Object* _obj_blocking_at_for_path(Object* mover, int tile, int elev)
 {
     ObjectListNode* objectListNode;
@@ -2453,12 +2482,12 @@ Object* _obj_blocking_at_for_path(Object* mover, int tile, int elev)
             if ((obj->flags & OBJECT_HIDDEN) == 0 && (obj->flags & OBJECT_NO_BLOCK) == 0 && obj != mover) {
                 type = FID_TYPE(obj->fid);
                 if (type == OBJ_TYPE_CRITTER) {
-                    // For the player out of combat, critters are not blockers
-                    if (mover == gDude && !isInCombat()) {
-                        // treat as non-blocking
-                    } else {
+                    // For the player out of combat, only critters with walk animations are passable (pushable).
+                    // Immobile critters (e.g., turrets) block the path.
+                    if (mover != gDude || isInCombat() || !critterHasWalkAnimation(obj)) {
                         return obj;
                     }
+                    // Otherwise, fall through - treat as passable.
                 } else if (type == OBJ_TYPE_SCENERY || type == OBJ_TYPE_WALL) {
                     return obj;
                 }
@@ -2479,8 +2508,8 @@ Object* _obj_blocking_at_for_path(Object* mover, int tile, int elev)
                         if ((obj->flags & OBJECT_HIDDEN) == 0 && (obj->flags & OBJECT_NO_BLOCK) == 0 && obj != mover) {
                             type = FID_TYPE(obj->fid);
                             if (type == OBJ_TYPE_CRITTER) {
-                                if (mover == gDude && !isInCombat()) {
-                                    // ignore
+                                if (mover == gDude && !isInCombat() && critterHasWalkAnimation(obj)) {
+                                    // passable
                                 } else {
                                     return obj;
                                 }
@@ -3393,10 +3422,6 @@ static int _obj_offset_table_init()
             for (int y = 0; y < gObjectsUpdateAreaHexHeight; y++) {
                 for (int x = 0; x < gObjectsUpdateAreaHexWidth; x++) {
                     int tile = tileFromScreenXY(tileX, originTileY);
-                    if (tile == -1) {
-                        goto err;
-                    }
-
                     tileX += 32;
                     *offsets++ = tile - originTile;
                 }
@@ -3594,11 +3619,11 @@ static void _obj_blend_table_init()
     _glassGrayTable[0] = 0;
     _commonGrayTable[0] = 0;
 
-    _wallBlendTable = _getColorBlendTable(_colorTable[25439]);
-    _glassBlendTable = _getColorBlendTable(_colorTable[10239]);
-    _steamBlendTable = _getColorBlendTable(_colorTable[32767]);
-    _energyBlendTable = _getColorBlendTable(_colorTable[30689]);
-    _redBlendTable = _getColorBlendTable(_colorTable[31744]);
+    _wallBlendTable = _getColorBlendTable(_colorTable[COL_PALE_LAVENDER]);
+    _glassBlendTable = _getColorBlendTable(_colorTable[COL_PERIWINKLE]);
+    _steamBlendTable = _getColorBlendTable(_colorTable[COL_WHITE]);
+    _energyBlendTable = _getColorBlendTable(_colorTable[COL_GOLDEN_YELLOW]);
+    _redBlendTable = _getColorBlendTable(_colorTable[COL_PURE_RED]);
 }
 
 // NOTE: Inlined.
@@ -3606,11 +3631,11 @@ static void _obj_blend_table_init()
 // 0x48D2E8
 static void _obj_blend_table_exit()
 {
-    _freeColorBlendTable(_colorTable[25439]);
-    _freeColorBlendTable(_colorTable[10239]);
-    _freeColorBlendTable(_colorTable[32767]);
-    _freeColorBlendTable(_colorTable[30689]);
-    _freeColorBlendTable(_colorTable[31744]);
+    _freeColorBlendTable(_colorTable[COL_PALE_LAVENDER]);
+    _freeColorBlendTable(_colorTable[COL_PERIWINKLE]);
+    _freeColorBlendTable(_colorTable[COL_WHITE]);
+    _freeColorBlendTable(_colorTable[COL_GOLDEN_YELLOW]);
+    _freeColorBlendTable(_colorTable[COL_PURE_RED]);
 }
 
 // 0x48D348
@@ -4843,7 +4868,7 @@ static void objectDrawOutline(Object* object, Rect* rect)
             v44 = frameHeight / 5;
             break;
         case OUTLINE_TYPE_2:
-            color = _colorTable[31744];
+            color = _colorTable[COL_PURE_RED];
             v44 = 0;
             if (v53 != 0) {
                 v47 = _commonGrayTable;
@@ -4851,7 +4876,7 @@ static void objectDrawOutline(Object* object, Rect* rect)
             }
             break;
         case OUTLINE_TYPE_GREY:
-            color = _colorTable[15855];
+            color = _colorTable[COL_GRAY_OLIVE];
             v44 = 0;
             if (v53 != 0) {
                 v47 = _commonGrayTable;
@@ -4866,7 +4891,7 @@ static void objectDrawOutline(Object* object, Rect* rect)
             break;
         case OUTLINE_TYPE_ITEM:
             v44 = 0;
-            color = _colorTable[30632];
+            color = _colorTable[COL_GOLDEN_YELLOW];
             if (v53 != 0) {
                 v47 = _commonGrayTable;
                 v48 = _redBlendTable;
@@ -4879,7 +4904,7 @@ static void objectDrawOutline(Object* object, Rect* rect)
             v44 = frameHeight;
             break;
         default:
-            color = _colorTable[31775];
+            color = _colorTable[COL_MAUVE];
             v53 = 0;
             v44 = 0;
             break;

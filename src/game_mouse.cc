@@ -22,6 +22,7 @@
 #include "kb.h"
 #include "mouse.h"
 #include "object.h"
+#include "party_member.h"
 #include "proto.h"
 #include "proto_instance.h"
 #include "settings.h"
@@ -227,7 +228,7 @@ static unsigned char gGameMouseActionMenuHighlightedItemIndex = 0;
 static const short gGameMouseActionMenuItemFrmIds[GAME_MOUSE_ACTION_MENU_ITEM_COUNT] = {
     253, // Cancel
     255, // Drop
-    257, // Inventory
+    5200, // Use Item From Inventory - new version with hand
     259, // Look
     261, // Rotate
     263, // Talk
@@ -244,13 +245,14 @@ static const short gGameMouseActionMenuItemFrmIds[GAME_MOUSE_ACTION_MENU_ITEM_CO
     6783, // Sort Weight
     4203, // Sort Value
     7443, // Sort Reverse
+    257, // Companion Inventory - former Use Item From Inventory
 };
 
 // Array for highlighted context items - needed for sort menu
 static const short gGameMouseActionMenuItemHighlightedFrmIds[GAME_MOUSE_ACTION_MENU_ITEM_COUNT] = {
     252, // Cancel (highlighted) - instead of 253 - 1
     254, // Drop (highlighted) - instead of 255 - 1
-    256, // Inventory (highlighted) - instead of 257 - 1
+    5193, // Inventory (highlighted) - New version with hand
     258, // Look (highlighted) - instead of 259 - 1
     260, // Rotate (highlighted) - instead of 261 - 1
     262, // Talk (highlighted) - instead of 263 - 1
@@ -267,6 +269,7 @@ static const short gGameMouseActionMenuItemHighlightedFrmIds[GAME_MOUSE_ACTION_M
     6777, // Sort Weight (highlighted) - instead of 6495 - 1
     4197, // Sort Value (highlighted) - instead of 6671 - 1
     7437, // Sort Reverse (highlighted) - instead of 5951 - 1
+    256, // Inventory (highlighted) - instead of 257 - 1 - former Use Item From Inventory
 };
 
 // 0x518D34
@@ -554,8 +557,8 @@ bool HandleHoldToHighlight()
     static bool wasHighlighting = false;
     static bool keyProcessed = false;
 
-    // Check if 'Left Shift' is currently pressed (including repeat state)
-    int shiftKeyScancode = SDL_SCANCODE_LSHIFT;
+    // Check if 'Left Control' is currently pressed (including repeat state)
+    int shiftKeyScancode = SDL_SCANCODE_LCTRL;
     bool shiftKeyPressed = false;
 
     if (shiftKeyScancode >= 0 && shiftKeyScancode < SDL_NUM_SCANCODES) {
@@ -979,24 +982,24 @@ void gameMouseRefresh()
 
                         if (pointedObjectIsCritter) {
                             if (pointedObject->data.critter.combat.team != 0) {
-                                color = _colorTable[32767];
+                                color = _colorTable[COL_WHITE];
                             } else {
-                                color = _colorTable[32495];
+                                color = _colorTable[COL_LIGHT_APRICOT];
                             }
                         } else {
-                            color = _colorTable[17969];
+                            color = _colorTable[COL_WARM_GRAY_2];
                         }
                     } else {
                         snprintf(formattedAccuracy, sizeof(formattedAccuracy), " %c ", 'X');
 
                         if (pointedObjectIsCritter) {
                             if (pointedObject->data.critter.combat.team != 0) {
-                                color = _colorTable[31744];
+                                color = _colorTable[COL_PURE_RED];
                             } else {
-                                color = _colorTable[18161];
+                                color = _colorTable[COL_PALE_OLIVE_GRAY];
                             }
                         } else {
-                            color = _colorTable[32239];
+                            color = _colorTable[COL_SALMON];
                         }
                     }
 
@@ -1031,22 +1034,22 @@ void gameMouseRefresh()
         if (distance != 0) {
             if (!isInCombat()) {
                 formattedActionPoints[0] = '\0';
-                color = _colorTable[31744];
+                color = _colorTable[COL_PURE_RED];
             } else {
                 int actionPointsMax = critterGetMovementPointCostAdjustedForCrippledLegs(gDude, distance);
                 int actionPointsRequired = std::max(0, actionPointsMax - _combat_free_move);
 
                 if (actionPointsRequired <= gDude->data.critter.combat.ap) {
                     snprintf(formattedActionPoints, sizeof(formattedActionPoints), "%d", actionPointsRequired);
-                    color = _colorTable[32767];
+                    color = _colorTable[COL_WHITE];
                 } else {
                     snprintf(formattedActionPoints, sizeof(formattedActionPoints), "%c", 'X');
-                    color = _colorTable[31744];
+                    color = _colorTable[COL_PURE_RED];
                 }
             }
         } else {
             snprintf(formattedActionPoints, sizeof(formattedActionPoints), "%c", 'X');
-            color = _colorTable[31744];
+            color = _colorTable[COL_PURE_RED];
         }
 
         if (gameMouseRenderActionPoints(formattedActionPoints, color) == 0) {
@@ -1323,8 +1326,16 @@ void _gmouse_handle_event(int mouseX, int mouseY, int mouseState)
                         }
                     }
 
-                    if (actionCheckPush(gDude, targetObj)) {
-                        actionMenuItems[actionMenuItemsCount++] = GAME_MOUSE_ACTION_MENU_ITEM_PUSH;
+                    if (!settings.enhancements.auto_push) {
+                        if (actionCheckPush(gDude, targetObj)) {
+                            actionMenuItems[actionMenuItemsCount++] = GAME_MOUSE_ACTION_MENU_ITEM_PUSH;
+                        }
+                    }
+
+                    if (!settings.enhancements.strict_vanilla && settings.enhancements.companion_inventory) {
+                        if (objectIsPartyMember(targetObj) && targetObj != gDude) {
+                            actionMenuItems[actionMenuItemsCount++] = GAME_MOUSE_ACTION_MENU_ITEM_COMPANION_INVENTORY;
+                        }
                     }
                 }
 
@@ -1424,8 +1435,14 @@ void _gmouse_handle_event(int mouseX, int mouseY, int mouseState)
                         inventoryOpenUseItemOn(targetObj);
                         break;
                     case GAME_MOUSE_ACTION_MENU_ITEM_LOOK:
-                        if (objectExamine(gDude, targetObj) == -1) {
-                            objectLookAt(gDude, targetObj);
+                        // For companions, open their inventory instead of examining
+                        // Could replace/augment this with an icon switch?
+                        if (objectIsPartyMember(targetObj) && targetObj != gDude) {
+                            inventoryOpenWithCycling(targetObj);
+                        } else {
+                            if (objectExamine(gDude, targetObj) == -1) {
+                                objectLookAt(gDude, targetObj);
+                            }
                         }
                         break;
                     case GAME_MOUSE_ACTION_MENU_ITEM_ROTATE:
@@ -1449,10 +1466,13 @@ void _gmouse_handle_event(int mouseX, int mouseY, int mouseState)
                             break;
                         }
                         break;
-                    case GAME_MOUSE_ACTION_MENU_ITEM_USE_SKILL:
-                        if (1) {
-                            int skill = -1;
-
+                    case GAME_MOUSE_ACTION_MENU_ITEM_USE_SKILL: {
+                        int skill = -1;
+                        if (interfaceIsSuperWide()) {
+                            // use multidex in superwide mode
+                            skill = multidexSkillSelectExact();
+                        } else {
+                            // use regular skilldex otherwise
                             int rc = skilldexOpen();
                             switch (rc) {
                             case SKILLDEX_RC_SNEAK:
@@ -1479,16 +1499,25 @@ void _gmouse_handle_event(int mouseX, int mouseY, int mouseState)
                             case SKILLDEX_RC_REPAIR:
                                 skill = SKILL_REPAIR;
                                 break;
-                            }
-
-                            if (skill != -1) {
-                                actionUseSkill(gDude, targetObj, skill);
+                            default:
+                                skill = -1;
+                                break;
                             }
                         }
-                        break;
-                    case GAME_MOUSE_ACTION_MENU_ITEM_PUSH:
-                        actionPush(gDude, targetObj);
-                        break;
+                        if (skill != -1) {
+                            actionUseSkill(gDude, targetObj, skill);
+                        }
+                    } break;
+                        if (!settings.enhancements.auto_push) {
+                        case GAME_MOUSE_ACTION_MENU_ITEM_PUSH:
+                            actionPush(gDude, targetObj);
+                            break;
+                        }
+                        if (!settings.enhancements.strict_vanilla && settings.enhancements.companion_inventory) {
+                        case GAME_MOUSE_ACTION_MENU_ITEM_COMPANION_INVENTORY:
+                            inventoryOpenWithCycling(targetObj);
+                            break;
+                        }
                     }
                 }
             }
@@ -1857,9 +1886,13 @@ bool gameMouseObjectsIsVisible()
 // 0x44CEC4
 Object* gameMouseGetObjectUnderCursor(int objectType, bool includeDude, int elevation)
 {
+    int screenX;
+    int screenY;
+    mouseGetPosition(&screenX, &screenY);
+
     int mouseX;
     int mouseY;
-    mouseGetPosition(&mouseX, &mouseY);
+    mapScreenToVirtual(screenX, screenY, &mouseX, &mouseY);
 
     bool intersectsRoof = false;
     if (objectType == -1) {
@@ -2233,7 +2266,7 @@ int gameMouseRenderAccuracy(const char* string, int color)
         gGameMouseActionHitFrmWidth);
 
     int oldFont = fontGetCurrent();
-    fontSetCurrent(101);
+    fontSetCurrent(108);
 
     fontDrawText(gGameMouseActionHitFrmData + gGameMouseActionHitFrmWidth + crosshairFrmWidth + 1,
         string,
@@ -2245,7 +2278,7 @@ int gameMouseRenderAccuracy(const char* string, int color)
         gGameMouseActionHitFrmWidth - crosshairFrmWidth,
         gGameMouseActionHitFrmHeight,
         gGameMouseActionHitFrmWidth,
-        _colorTable[0]);
+        _colorTable[COL_BLACK]);
 
     fontSetCurrent(oldFont);
 
@@ -2264,12 +2297,12 @@ int gameMouseRenderActionPoints(const char* string, int color)
     }
 
     int oldFont = fontGetCurrent();
-    fontSetCurrent(101);
+    fontSetCurrent(108);
 
     int length = fontGetStringWidth(string);
     fontDrawText(gGameMouseHexCursorFrmData + gGameMouseHexCursorFrmWidth * (gGameMouseHexCursorHeight - fontGetLineHeight()) / 2 + (gGameMouseHexCursorFrmWidth - length) / 2, string, gGameMouseHexCursorFrmWidth, gGameMouseHexCursorFrmWidth, color);
 
-    bufferOutline(gGameMouseHexCursorFrmData, gGameMouseHexCursorFrmWidth, gGameMouseHexCursorHeight, gGameMouseHexCursorFrmWidth, _colorTable[0]);
+    bufferOutline(gGameMouseHexCursorFrmData, gGameMouseHexCursorFrmWidth, gGameMouseHexCursorHeight, gGameMouseHexCursorFrmWidth, _colorTable[COL_BLACK]);
 
     fontSetCurrent(oldFont);
 
@@ -2539,6 +2572,14 @@ int gameMouseUpdateHexCursorFid(Rect* rect)
 // 0x44DF94
 int _gmouse_3d_move_to(int x, int y, int elevation, Rect* rect)
 {
+    // Convert from screen coordinates to the coordinate space the tile and
+    // object renderers work in. When no zoom is active this is a no-op.
+    int vx;
+    int vy;
+    mapScreenToVirtual(x, y, &vx, &vy);
+    x = vx;
+    y = vy;
+
     if (_gmouse_mapper_mode == 0) {
         if (gGameMouseMode != GAME_MOUSE_MODE_MOVE) {
             int offsetX = 0;

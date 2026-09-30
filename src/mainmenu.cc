@@ -9,6 +9,7 @@
 #include "draw.h"
 #include "game.h"
 #include "game_sound.h"
+#include "game_version.h"
 #include "input.h"
 #include "kb.h"
 #include "memory.h"
@@ -172,6 +173,16 @@ static FrmImage _mainMenuFissionModLogoFrmImage;
 
 bool mainMenuLoadOffsetsFromConfig(MainMenuOffsets* offsets, bool isWidescreen)
 {
+    if (IS_FALLOUT_1()) {
+        return loadOffsetsFromConfig<MainMenuOffsets>(
+            offsets,
+            isWidescreen,
+            "f1_mainmenu",
+            gMainMenuOffsetsF1_640,
+            gMainMenuOffsetsF1_800,
+            applyConfigToMainMenuOffsets);
+    }
+
     return loadOffsetsFromConfig<MainMenuOffsets>(
         offsets,
         isWidescreen,
@@ -182,11 +193,8 @@ bool mainMenuLoadOffsetsFromConfig(MainMenuOffsets* offsets, bool isWidescreen)
 }
 
 // move to seperate widescreen.cc file later?
-void mainMenuWriteDefaultOffsetsToConfig(bool isWidescreen, const MainMenuOffsets* defaults)
+void mainMenuWriteDefaultOffsetsToConfig(const char* section, const MainMenuOffsets* defaults)
 {
-    const char* section = isWidescreen ? "mainmenu800" : "mainmenu640";
-
-    // Write all default values to config
     configSetInt(&gGameConfig, section, "copyrightX", defaults->copyrightX);
     configSetInt(&gGameConfig, section, "copyrightY", defaults->copyrightY);
     configSetInt(&gGameConfig, section, "versionX", defaults->versionX);
@@ -268,11 +276,11 @@ int mainMenuWindowInit()
     // Check if we should write defaults or not
     int writeOffsets = 0;
     if (configGetInt(&gGameConfig, "debug", "write_offsets", &writeOffsets) && writeOffsets) {
-        // Write BOTH sets of defaults
-        mainMenuWriteDefaultOffsetsToConfig(false, &gMainMenuOffsets640); // 640x480 defaults
-        mainMenuWriteDefaultOffsetsToConfig(true, &gMainMenuOffsets800); // 800x600 defaults
+        mainMenuWriteDefaultOffsetsToConfig("mainmenu640", &gMainMenuOffsets640);
+        mainMenuWriteDefaultOffsetsToConfig("mainmenu800", &gMainMenuOffsets800);
+        mainMenuWriteDefaultOffsetsToConfig("f1_mainmenu640", &gMainMenuOffsetsF1_640);
+        mainMenuWriteDefaultOffsetsToConfig("f1_mainmenu800", &gMainMenuOffsetsF1_800);
 
-        // Disable writing and save
         configSetInt(&gGameConfig, "debug", "write_offsets", 0);
         gameConfigSave();
     }
@@ -303,7 +311,15 @@ int mainMenuWindowInit()
 
     gMainMenuWindowBuffer = windowGetBuffer(gMainMenuWindow);
 
-    int backgroundFid = artGetFidWithVariant(OBJ_TYPE_INTERFACE, 140, gameIsWidescreen());
+    int backgroundFid;
+
+    // Special handling for Fallout 1 Mainmenu which lacks option button
+    if (IS_FALLOUT_1() && !settings.enhancements.strict_vanilla) {
+        backgroundFid = artGetFidWithVariant(OBJ_TYPE_INTERFACE, 470, gameIsWidescreen());
+    } else {
+        backgroundFid = artGetFidWithVariant(OBJ_TYPE_INTERFACE, 140, gameIsWidescreen());
+    }
+
     if (!_mainMenuBackgroundFrmImage.lock(backgroundFid)) {
         // NOTE: Uninline.
         return main_menu_fatal_error();
@@ -320,7 +336,12 @@ int mainMenuWindowInit()
     //        0x010000 - change the color for version string only
     //        0x020000 - underline text (only for the version string)
     //        0x040000 - monospace font (only for the version string)
-    int fontSettings = _colorTable[21091];
+    int fontSettings;
+    if (!IS_FALLOUT_1()) {
+        fontSettings = _colorTable[COL_OLIVE_YELLOW];
+    } else {
+        fontSettings = _colorTable[COL_MEDIUM_GRAY];
+    }
     int fontSettingsSFall = settings.mod_settings.main_menu_font_color;
     if (fontSettingsSFall && !(fontSettingsSFall & 0x010000))
         fontSettings = fontSettingsSFall & 0xFF;
@@ -331,6 +352,7 @@ int mainMenuWindowInit()
 
     // Copyright.
     msg.num = 20;
+
     if (messageListGetItem(&gMiscMessageList, &msg)) {
         windowDrawText(gMainMenuWindow, msg.text, 0, offsetX + gOffsets.copyrightX, offsetY + gOffsets.copyrightY, fontSettings | 0x06000000);
     }
@@ -430,9 +452,21 @@ int mainMenuWindowInit()
     offsetY = settings.mod_settings.main_menu_offset_y;
 
     for (int index = 0; index < MAIN_MENU_BUTTON_COUNT; index++) {
+        // Fallout 1 has no Options button.
+        if (IS_FALLOUT_1() && index == MAIN_MENU_BUTTON_OPTIONS && settings.enhancements.strict_vanilla) {
+            gMainMenuButtons[index] = -1;
+            continue;
+        }
+
+        // Close the gap left by hidden buttons above this one.
+        int visualIndex = index;
+        if (IS_FALLOUT_1() && index > MAIN_MENU_BUTTON_OPTIONS && settings.enhancements.strict_vanilla) {
+            visualIndex--;
+        }
+
         gMainMenuButtons[index] = buttonCreate(gMainMenuWindow,
             offsetX + gOffsets.buttonBaseX,
-            offsetY + gOffsets.buttonBaseY + index * 42 - index,
+            offsetY + gOffsets.buttonBaseY + visualIndex * 42 - visualIndex,
             26,
             26,
             -1,
@@ -454,17 +488,32 @@ int mainMenuWindowInit()
     fontSetCurrent(104);
 
     // modConfig: Allow to change font color of buttons
-    fontSettings = _colorTable[21091];
+    fontSettings = _colorTable[COL_OLIVE_YELLOW];
     fontSettingsSFall = settings.mod_settings.main_menu_big_font_color;
     if (fontSettingsSFall) {
         fontSettings = fontSettingsSFall & 0xFF;
     }
 
     for (int index = 0; index < MAIN_MENU_BUTTON_COUNT; index++) {
-        msg.num = 9 + index;
+        // Fallout 1 has no Options button (and therefore no Options string in misc.msg).
+        if (IS_FALLOUT_1() && index == MAIN_MENU_BUTTON_OPTIONS && settings.enhancements.strict_vanilla) {
+            continue;
+        }
+
+        // Fallout 1's misc.msg is missing the Options entry, so strings after it shift down by one.
+        msg.num = 9 + index; // Intro
+        /*if (IS_FALLOUT_1() && index > MAIN_MENU_BUTTON_OPTIONS && settings.enhancements.strict_vanilla) {
+            msg.num--;
+        }*/
+
         if (messageListGetItem(&gMiscMessageList, &msg)) {
+            int visualIndex = index;
+            if (IS_FALLOUT_1() && index > MAIN_MENU_BUTTON_OPTIONS && settings.enhancements.strict_vanilla) {
+                visualIndex--;
+            }
+
             len = fontGetStringWidth(msg.text);
-            fontDrawText(gMainMenuWindowBuffer + gOffsets.buttonTextOffsetX + offsetX + gOffsets.width * (gOffsets.buttonTextOffsetY + offsetY + 42 * index - index + 20) + 126 - (len / 2), msg.text, gOffsets.width - (126 - (len / 2)) - 1, gOffsets.width, fontSettings);
+            fontDrawText(gMainMenuWindowBuffer + gOffsets.buttonTextOffsetX + offsetX + gOffsets.width * (gOffsets.buttonTextOffsetY + offsetY + 42 * visualIndex - visualIndex + 20) + 126 - (len / 2), msg.text, gOffsets.width - (126 - (len / 2)) - 1, gOffsets.width, fontSettings);
         }
     }
 
@@ -484,8 +533,7 @@ void mainMenuWindowFree()
     }
 
     for (int index = 0; index < MAIN_MENU_BUTTON_COUNT; index++) {
-        // FIXME: Why it tries to free only invalid buttons?
-        if (gMainMenuButtons[index] == -1) {
+        if (gMainMenuButtons[index] != -1) {
             buttonDestroy(gMainMenuButtons[index]);
         }
     }
@@ -572,9 +620,9 @@ static int showFissionAbout()
         bodyLines,
         2,
         192, 135,
-        _colorTable[32328],
+        _colorTable[COL_ORANGE],
         nullptr,
-        _colorTable[32328],
+        _colorTable[COL_ORANGE],
         1 // DIALOG_BOX_OK
     );
     return 1;
@@ -599,6 +647,11 @@ int mainMenuWindowHandleEvents()
         int keyCode = inputGetInput();
 
         for (int buttonIndex = 0; buttonIndex < MAIN_MENU_BUTTON_COUNT; buttonIndex++) {
+            // Fallout 1 has no Options button.
+            if (IS_FALLOUT_1() && buttonIndex == MAIN_MENU_BUTTON_OPTIONS && settings.enhancements.strict_vanilla) {
+                continue;
+            }
+
             if (keyCode == gMainMenuButtonKeyBindings[buttonIndex] || keyCode == toupper(gMainMenuButtonKeyBindings[buttonIndex])) {
                 // NOTE: Uninline.
                 main_menu_play_sound("nmselec1");
@@ -873,13 +926,13 @@ static int showModList()
     // Button and window titles
     const char* mods = (const char*)getmsg(&gFissionMessageList, &gFissionMessageListItem, 500);
     fontDrawText(gModListWindowBuffer + MOD_WINDOW_WIDTH * 16 + 49,
-        mods, MOD_WINDOW_WIDTH, MOD_WINDOW_WIDTH, _colorTable[18979]);
+        mods, MOD_WINDOW_WIDTH, MOD_WINDOW_WIDTH, _colorTable[COL_GREENISH_BROWN]);
     const char* done = (const char*)getmsg(&gFissionMessageList, &gFissionMessageListItem, 501);
     fontDrawText(gModListWindowBuffer + MOD_WINDOW_WIDTH * 186 + 69,
-        done, MOD_WINDOW_WIDTH, MOD_WINDOW_WIDTH, _colorTable[18979]);
+        done, MOD_WINDOW_WIDTH, MOD_WINDOW_WIDTH, _colorTable[COL_GREENISH_BROWN]);
     const char* cancel = (const char*)getmsg(&gFissionMessageList, &gFissionMessageListItem, 502);
     fontDrawText(gModListWindowBuffer + MOD_WINDOW_WIDTH * 186 + 171,
-        cancel, MOD_WINDOW_WIDTH, MOD_WINDOW_WIDTH, _colorTable[18979]);
+        cancel, MOD_WINDOW_WIDTH, MOD_WINDOW_WIDTH, _colorTable[COL_GREENISH_BROWN]);
 
     // Draw the mod list
     int count = modListDrawList();
@@ -912,7 +965,7 @@ static int modListDrawList()
     if (gModListTempCount == 0) {
         fontSetCurrent(101);
         fontDrawText(gModListWindowBuffer + MOD_WINDOW_WIDTH * (MOD_LIST_Y + 10) + (MOD_LIST_X + 10),
-            "No mods loaded", MOD_WINDOW_WIDTH, MOD_WINDOW_WIDTH, _colorTable[992]);
+            "No mods loaded", MOD_WINDOW_WIDTH, MOD_WINDOW_WIDTH, _colorTable[COL_LIME_GREEN]);
         return 0;
     }
 
@@ -934,7 +987,7 @@ static int modListDrawList()
             color = selected ? _colorTable[MOD_DISABLED_SELECTED_COLOR] : _colorTable[MOD_DISABLED_COLOR];
         } else {
             // Enabled mods: normal highlight or normal text
-            color = selected ? _colorTable[32747] : _colorTable[992];
+            color = selected ? _colorTable[COL_LIGHT_LEMON] : _colorTable[COL_LIME_GREEN];
         }
 
         // Truncate name to list width
@@ -945,7 +998,7 @@ static int modListDrawList()
         // In reorder mode, indent the currently selected line (overrides color)
         if (gModListReorderMode && selected) {
             x += 10; // indent
-            color = _colorTable[32767]; // bright white
+            color = _colorTable[COL_WHITE]; // bright white
         }
         fontDrawText(gModListWindowBuffer + MOD_WINDOW_WIDTH * y + x,
             truncatedName, MOD_WINDOW_WIDTH, MOD_WINDOW_WIDTH, color);
@@ -1007,10 +1060,10 @@ static void modListDrawDetails(int selectedIndex)
     int nameWidth = fontGetStringWidth(truncatedName);
     int nameLineHeight = fontGetLineHeight();
     fontDrawText(gModListWindowBuffer + MOD_WINDOW_WIDTH * MOD_NAME_Y + MOD_TEXT_X,
-        truncatedName, MOD_WINDOW_WIDTH, MOD_WINDOW_WIDTH, _colorTable[0]);
+        truncatedName, MOD_WINDOW_WIDTH, MOD_WINDOW_WIDTH, _colorTable[COL_BLACK]);
 
     // Mod Author
-    fontSetCurrent(101);
+    fontSetCurrent(108);
     int authorLineHeight = fontGetLineHeight();
     int authorY = MOD_NAME_Y + (nameLineHeight - authorLineHeight) - 4;
     int authorX = MOD_TEXT_X + nameWidth + 8; // small gap
@@ -1019,7 +1072,7 @@ static void modListDrawDetails(int selectedIndex)
     int byWidth = fontGetStringWidth(by);
     // Draw the "by " prefix
     fontDrawText(gModListWindowBuffer + MOD_WINDOW_WIDTH * authorY + authorX,
-        by, MOD_WINDOW_WIDTH, MOD_WINDOW_WIDTH, _colorTable[0]);
+        by, MOD_WINDOW_WIDTH, MOD_WINDOW_WIDTH, _colorTable[COL_BLACK]);
 
     int gap = 5;
     int maxAuthorWidth = fullTextWidth - (nameWidth + 8 + byWidth + gap);
@@ -1027,17 +1080,17 @@ static void modListDrawDetails(int selectedIndex)
         char truncatedAuthor[MOD_INFO_MAX_AUTHOR + 32];
         truncateStringToWidth(info->author, truncatedAuthor, sizeof(truncatedAuthor), maxAuthorWidth, 101);
         fontDrawText(gModListWindowBuffer + MOD_WINDOW_WIDTH * authorY + authorX + byWidth + gap,
-            truncatedAuthor, MOD_WINDOW_WIDTH, MOD_WINDOW_WIDTH, _colorTable[0]);
+            truncatedAuthor, MOD_WINDOW_WIDTH, MOD_WINDOW_WIDTH, _colorTable[COL_BLACK]);
     }
 
     // Draw divider line below name/author
     int lineY = MOD_NAME_Y + nameLineHeight + 4; // gap below name line
     int lineStartX = MOD_TEXT_X;
     int lineEndX = MOD_TEXT_X + fullTextWidth;
-    windowDrawLine(gModListWindow, lineStartX, lineY, lineEndX, lineY, _colorTable[0]);
-    windowDrawLine(gModListWindow, lineStartX, lineY + 1, lineEndX, lineY + 1, _colorTable[0]);
+    windowDrawLine(gModListWindow, lineStartX, lineY, lineEndX, lineY, _colorTable[COL_BLACK]);
+    windowDrawLine(gModListWindow, lineStartX, lineY + 1, lineEndX, lineY + 1, _colorTable[COL_BLACK]);
 
-    fontSetCurrent(101);
+    fontSetCurrent(108);
     int lineHeight = fontGetLineHeight() + 2;
 
     // Dynamically calculate total lines available above "DISABLED" text
@@ -1092,7 +1145,7 @@ static void modListDrawDetails(int selectedIndex)
             char savedChar = descBuffer[end];
             descBuffer[end] = '\0';
             fontDrawText(gModListWindowBuffer + MOD_WINDOW_WIDTH * yDesc + MOD_TEXT_X,
-                descBuffer + start, MOD_WINDOW_WIDTH, MOD_WINDOW_WIDTH, _colorTable[0]);
+                descBuffer + start, MOD_WINDOW_WIDTH, MOD_WINDOW_WIDTH, _colorTable[COL_BLACK]);
             descBuffer[end] = savedChar;
             yDesc += lineHeight;
             linesDrawn++;
@@ -1100,7 +1153,7 @@ static void modListDrawDetails(int selectedIndex)
         if (actualDescLines > maxDescLines - 1) {
             // Draw ellipsis on the next line
             fontDrawText(gModListWindowBuffer + MOD_WINDOW_WIDTH * yDesc + MOD_TEXT_X,
-                "...", MOD_WINDOW_WIDTH, MOD_WINDOW_WIDTH, _colorTable[0]);
+                "...", MOD_WINDOW_WIDTH, MOD_WINDOW_WIDTH, _colorTable[COL_BLACK]);
             linesDrawn++;
         }
     }
@@ -1114,7 +1167,7 @@ static void modListDrawDetails(int selectedIndex)
             char savedChar = depBuffer[end];
             depBuffer[end] = '\0';
             fontDrawText(gModListWindowBuffer + MOD_WINDOW_WIDTH * yDep + MOD_TEXT_X,
-                depBuffer + start, MOD_WINDOW_WIDTH, MOD_WINDOW_WIDTH, _colorTable[0]);
+                depBuffer + start, MOD_WINDOW_WIDTH, MOD_WINDOW_WIDTH, _colorTable[COL_BLACK]);
             depBuffer[end] = savedChar;
             yDep += lineHeight;
         }
@@ -1135,7 +1188,7 @@ static void modListDrawDetails(int selectedIndex)
         int y = MOD_ICON_Y + (iconHeight - textHeight) / 2;
 
         fontDrawText(gModListWindowBuffer + MOD_WINDOW_WIDTH * y + x,
-            disabledText, MOD_WINDOW_WIDTH, MOD_WINDOW_WIDTH, _colorTable[32328]);
+            disabledText, MOD_WINDOW_WIDTH, MOD_WINDOW_WIDTH, _colorTable[COL_ORANGE]);
     }
 
     // Restore original font
@@ -1237,9 +1290,9 @@ static int modListHandleInput(int count)
                     bodyLines,
                     1,
                     192, 135,
-                    _colorTable[32328],
+                    _colorTable[COL_ORANGE],
                     nullptr,
-                    _colorTable[32328],
+                    _colorTable[COL_ORANGE],
                     1 // DIALOG_BOX_OK
                 );
                 memcpy(gLoadedMods, gModListTempMods, gModListTempCount * sizeof(ModInfo));

@@ -21,11 +21,13 @@
 #include "game_mouse.h"
 #include "game_movie.h"
 #include "game_sound.h"
+#include "game_version.h"
 #include "input.h"
 #include "interface.h"
 #include "item.h"
 #include "light.h"
 #include "loadsave.h"
+#include "map_edge.h"
 #include "memory.h"
 #include "message.h"
 #include "object.h"
@@ -73,6 +75,10 @@ static void _square_reset();
 static int _square_load(File* stream, int flags);
 static int mapHeaderWrite(MapHeader* ptr, File* stream);
 static int mapHeaderRead(MapHeader* ptr, File* stream);
+static void isoBlitVirtualToWindow(Rect* rect);
+static void isoComputeCrop();
+static int mapFindValidCameraCenter(int startTile);
+static void mapSnapZoomToFitEdg();
 
 static void loadModMapMessages();
 
@@ -160,6 +166,49 @@ MessageList gMapMessageList;
 // 0x631D50
 static unsigned char* gIsoWindowBuffer;
 
+// Virtual buffer + zoom state.
+static unsigned char* gIsoVirtualBuffer = nullptr;
+static int gIsoVirtualWidth = 0;
+static int gIsoVirtualHeight = 0;
+
+static float gIsoZoom = 1.0f;
+static int gIsoCropX = 0;
+static int gIsoCropY = 0;
+static int gIsoCropW = 0;
+static int gIsoCropH = 0;
+
+// Column-map cache for scaled blits.
+static int* gIsoColMapX = nullptr;
+static int* gIsoColMapY = nullptr;
+static int gIsoColMapW = 0; // destination width the maps were built for
+static int gIsoColMapH = 0; // destination height
+static int gIsoColMapVirtualW = 0; // source crop width
+static int gIsoColMapVirtualH = 0; // source crop height
+static int gIsoColMapCropX = 0; // source crop origin
+static int gIsoColMapCropY = 0;
+
+// Virtual buffer is (1 / MAX_ZOOM_OUT) times the visible game area in each
+// dimension. That is the maximum amount of world the player can ever see at
+// once. Zoom 1.0 = visible area exactly; higher = zoomed in; lower = zoomed out.
+static const float MAX_ZOOM_OUT = 0.5f;
+static const float MAX_ZOOM_IN = 4.0f;
+
+// Zoom ladder. Values chosen so each step is roughly 25%, endpoints land on
+// clean ratios, and the max zoom-out produces an exact 2x1 multiplication.
+static const float gZoomLadder[] = {
+    0.5f,
+    0.625f,
+    0.8f,
+    1.0f,
+    1.25f,
+    1.5f,
+    2.0f,
+    2.5f,
+    3.0f,
+    4.0f,
+};
+static const int gZoomLadderSize = sizeof(gZoomLadder) / sizeof(gZoomLadder[0]);
+
 // 0x631D54
 MapHeader gMapHeader;
 
@@ -191,42 +240,17 @@ static void mapAdjustCameraToValidArea(void)
     // Ensure stencil is built for current elevation
     tile_hires_stencil_on_center_tile_or_elevation_change();
 
-    int screenW = screenGetWidth();
-    int screenH = screenGetVisibleHeight();
-    int playerTile = gDude->tile;
-
-    // Find nearest valid center tile
-    int targetTile = playerTile;
-    if (!tile_hires_stencil_is_center_tile_allowed(playerTile, gElevation, screenW, screenH)) {
-        for (int radius = 1; radius < 100; ++radius) {
-            int found = -1;
-            for (int dy = -radius; dy <= radius && found == -1; ++dy) {
-                for (int dx = -radius; dx <= radius; ++dx) {
-                    if (abs(dx) + abs(dy) != radius) continue;
-                    int x = (playerTile % HEX_GRID_WIDTH) + dx;
-                    int y = (playerTile / HEX_GRID_WIDTH) + dy;
-                    if (x < 0 || x >= HEX_GRID_WIDTH || y < 0 || y >= HEX_GRID_HEIGHT) continue;
-                    int candidate = y * HEX_GRID_WIDTH + x;
-                    if (tile_hires_stencil_is_center_tile_allowed(candidate, gElevation, screenW, screenH)) {
-                        found = candidate;
-                        break;
-                    }
-                }
-            }
-            if (found != -1) {
-                targetTile = found;
-                break;
-            }
-        }
+    int target = mapFindValidCameraCenter(gDude->tile);
+    if (target == -1) {
+        // Fallback: keep player's tile. Better than doing nothing.
+        target = gDude->tile;
     }
 
-    // Force camera to target tile (bypass all restrictions)
     bool savedBorder = gTileBorderInitialized;
     gTileBorderInitialized = false;
-    tileSetCenter(targetTile, TILE_SET_CENTER_FLAG_IGNORE_SCROLL_RESTRICTIONS);
+    tileSetCenter(target, TILE_SET_CENTER_FLAG_IGNORE_SCROLL_RESTRICTIONS);
     gTileBorderInitialized = savedBorder;
 
-    // Rebuild stencil based on new camera position and refresh
     tile_hires_stencil_on_center_tile_or_elevation_change();
     tileWindowRefresh();
 }
@@ -245,6 +269,157 @@ void mapProcessPendingCameraAdjust(void)
         interfaceBarShow();
         paletteFadeTo(_cmap);
     }
+}
+
+void mapScreenToVirtual(int screenX, int screenY, int* virtualX, int* virtualY)
+{
+    int sx = gIsoCropX + (int)((long long)screenX * gIsoCropW / screenGetWidth());
+    int sy = gIsoCropY + (int)((long long)screenY * gIsoCropH / screenGetVisibleHeight());
+
+    if (sx < 0) sx = 0;
+    if (sy < 0) sy = 0;
+    if (sx >= gIsoVirtualWidth) sx = gIsoVirtualWidth - 1;
+    if (sy >= gIsoVirtualHeight) sy = gIsoVirtualHeight - 1;
+
+    *virtualX = sx;
+    *virtualY = sy;
+}
+
+void mapGetVirtualSize(int* width, int* height)
+{
+    *width = gIsoVirtualWidth;
+    *height = gIsoVirtualHeight;
+}
+
+static float isoSnapZoom(float zoom)
+{
+    if (zoom <= gZoomLadder[0]) return gZoomLadder[0];
+    if (zoom >= gZoomLadder[gZoomLadderSize - 1])
+        return gZoomLadder[gZoomLadderSize - 1];
+
+    float best = gZoomLadder[0];
+    float bestDist = std::abs(zoom - best);
+    for (int i = 1; i < gZoomLadderSize; i++) {
+        float d = std::abs(zoom - gZoomLadder[i]);
+        if (d < bestDist) {
+            bestDist = d;
+            best = gZoomLadder[i];
+        }
+    }
+    return best;
+}
+
+void mapZoomInStep()
+{
+    float z = mapGetZoom();
+    for (int i = 0; i < gZoomLadderSize; i++) {
+        if (gZoomLadder[i] > z + 0.001f) {
+            mapSetZoom(gZoomLadder[i]);
+            return;
+        }
+    }
+}
+
+void mapZoomOutStep()
+{
+    float z = mapGetZoom();
+    for (int i = gZoomLadderSize - 1; i >= 0; i--) {
+        if (gZoomLadder[i] < z - 0.001f) {
+            mapSetZoom(gZoomLadder[i]);
+            return;
+        }
+    }
+}
+
+float mapGetZoom()
+{
+    return gIsoZoom;
+}
+
+// Returns the nearest tile to `startTile` that is a valid camera center for
+// the current crop size, or -1 if none exists within a reasonable radius.
+// Small maps bypass the stencil entirely, same as tileSetCenter does.
+static int mapFindValidCameraCenter(int startTile)
+{
+    if (tile_hires_stencil_is_map_small()) {
+        return startTile;
+    }
+    if (tile_hires_stencil_is_center_tile_allowed(startTile, gElevation, gIsoCropW, gIsoCropH)) {
+        return startTile;
+    }
+
+    for (int radius = 1; radius < 100; ++radius) {
+        for (int dy = -radius; dy <= radius; ++dy) {
+            for (int dx = -radius; dx <= radius; ++dx) {
+                if (abs(dx) + abs(dy) != radius) continue;
+                int x = (startTile % HEX_GRID_WIDTH) + dx;
+                int y = (startTile / HEX_GRID_WIDTH) + dy;
+                if (x < 0 || x >= HEX_GRID_WIDTH || y < 0 || y >= HEX_GRID_HEIGHT) continue;
+                int cand = y * HEX_GRID_WIDTH + x;
+                if (tile_hires_stencil_is_center_tile_allowed(cand, gElevation, gIsoCropW, gIsoCropH)) {
+                    return cand;
+                }
+            }
+        }
+    }
+    return -1;
+}
+
+void mapSetZoom(float zoom)
+{
+    if (!gIsoVirtualBuffer) return;
+
+    zoom = isoSnapZoom(zoom);
+    if (zoom == gIsoZoom) return;
+
+    float oldZoom = gIsoZoom;
+    gIsoZoom = zoom;
+    isoComputeCrop(); // updates stencil view size
+
+    // The gate is now stricter (zoom out) or more permissive (zoom in).
+    // Re-validate the current camera position for the new crop size.
+    int target = mapFindValidCameraCenter(gCenterTile);
+    if (target == -1) {
+        // No legal position exists at this zoom. Revert.
+        gIsoZoom = oldZoom;
+        isoComputeCrop();
+        return;
+    }
+
+    if (target != gCenterTile) {
+        // Slide the camera to the nearest legal position. Use
+        // IGNORE_SCROLL_RESTRICTIONS to bypass tileSetCenter's own gate
+        // (we've already consulted it) and the border check, mirroring what
+        // mapAdjustCameraToValidArea does.
+        bool savedBorder = gTileBorderInitialized;
+        gTileBorderInitialized = false;
+        tileSetCenter(target, TILE_SET_CENTER_FLAG_IGNORE_SCROLL_RESTRICTIONS | TILE_SET_CENTER_REFRESH_WINDOW);
+        gTileBorderInitialized = savedBorder;
+    } else {
+        tileWindowRefresh();
+    }
+
+    gIsoColMapW = 0;
+    gIsoColMapH = 0;
+
+    isoBlitVirtualToWindow(nullptr);
+    windowRefresh(gIsoWindow);
+}
+
+static void isoComputeCrop()
+{
+    gIsoCropW = (int)(screenGetWidth() / gIsoZoom);
+    gIsoCropH = (int)(screenGetVisibleHeight() / gIsoZoom);
+
+    if (gIsoCropW < 1) gIsoCropW = 1;
+    if (gIsoCropH < 1) gIsoCropH = 1;
+    if (gIsoCropW > gIsoVirtualWidth) gIsoCropW = gIsoVirtualWidth;
+    if (gIsoCropH > gIsoVirtualHeight) gIsoCropH = gIsoVirtualHeight;
+
+    gIsoCropX = (gIsoVirtualWidth - gIsoCropW) / 2;
+    gIsoCropY = (gIsoVirtualHeight - gIsoCropH) / 2;
+
+    tile_hires_stencil_set_view_size(gIsoCropW, gIsoCropH);
 }
 
 // iso_init
@@ -281,14 +456,41 @@ int isoInit()
 
     debugPrint(">art_init\t\t");
 
-    if (tileInit(_square, SQUARE_GRID_WIDTH, SQUARE_GRID_HEIGHT, HEX_GRID_WIDTH, HEX_GRID_HEIGHT, gIsoWindowBuffer, screenGetWidth(), screenGetVisibleHeight(), screenGetWidth(), isoWindowRefreshRect) != 0) {
+    // Virtual buffer must cover the max possible view (physical window),
+    // not just the current play-area content width. Otherwise zoom-out has
+    // no room to grow, and play-area-derived zoom starts too tight.
+    int maxW = screenGetWidth();
+    int maxH = screenGetHeight();
+    if (gSdlWindow != nullptr) {
+        int ww = 0, wh = 0;
+        SDL_GetWindowSize(gSdlWindow, &ww, &wh);
+        if (ww > maxW) maxW = ww;
+        if (wh > maxH) maxH = wh;
+    }
+    // Virtual buffer covers MAX_ZOOM_OUT worth of the visible game area.
+    // Aspect ratio matches the visible window, so the blit is uniform.
+    gIsoVirtualWidth = (int)(screenGetWidth() / MAX_ZOOM_OUT);
+    gIsoVirtualHeight = (int)(screenGetVisibleHeight() / MAX_ZOOM_OUT);
+
+    gIsoVirtualBuffer = (unsigned char*)internal_malloc(gIsoVirtualWidth * gIsoVirtualHeight);
+    if (gIsoVirtualBuffer == nullptr) {
+        debugPrint("virtual iso buffer allocation failed in isoInit\n");
+        return -1;
+    }
+
+    if (tileInit(_square, SQUARE_GRID_WIDTH, SQUARE_GRID_HEIGHT,
+            HEX_GRID_WIDTH, HEX_GRID_HEIGHT,
+            gIsoVirtualBuffer,
+            gIsoVirtualWidth, gIsoVirtualHeight, gIsoVirtualWidth,
+            isoWindowRefreshRect)
+        != 0) {
         debugPrint("tile_init failed in iso_init\n");
         return -1;
     }
 
     debugPrint(">tile_init\t\t");
 
-    if (objectsInit(gIsoWindowBuffer, screenGetWidth(), screenGetVisibleHeight(), screenGetWidth()) != 0) {
+    if (objectsInit(gIsoVirtualBuffer, gIsoVirtualWidth, gIsoVirtualHeight, gIsoVirtualWidth) != 0) {
         debugPrint("obj_init failed in iso_init\n");
         return -1;
     }
@@ -315,6 +517,15 @@ int isoInit()
 
     // NOTE: Uninline.
     mapSetEnteringLocation(-1, -1, -1);
+
+    // Baseline zoom is 1.0 for every play area. The play area already
+    // determines the physical size of the visible game window via
+    // screenGetWidth/Height; zoom is relative to that.
+    gIsoZoom = 1.0f;
+    isoComputeCrop();
+
+    gIsoColMapW = 0;
+    gIsoColMapH = 0;
 
     return 0;
 }
@@ -346,6 +557,24 @@ void isoExit()
     objectsExit();
     tileExit();
     artExit();
+
+    if (gIsoColMapX) {
+        free(gIsoColMapX);
+        gIsoColMapX = nullptr;
+    }
+    if (gIsoColMapY) {
+        free(gIsoColMapY);
+        gIsoColMapY = nullptr;
+    }
+    gIsoColMapW = gIsoColMapH = 0;
+
+    if (gIsoVirtualBuffer) {
+        internal_free(gIsoVirtualBuffer);
+        gIsoVirtualBuffer = nullptr;
+    }
+    gIsoVirtualWidth = gIsoVirtualHeight = 0;
+
+    mapEdgeFree();
 
     windowDestroy(gIsoWindow);
 
@@ -439,6 +668,37 @@ bool isoIsDisabled()
     return gIsoEnabled == false;
 }
 
+// When a map or elevation with EDG data is loaded while the camera is zoomed
+// out, the current crop may be too large to fit inside that elevation's EDG
+// box, which leaves mapAdjustCameraToValidArea unable to find a legal camera
+// position. Snap the zoom in toward 1.0 to the least zoomed-out ladder level
+// whose crop fits. Never zooms out, never zooms past 1.0: maps that are too
+// small even at 1.0 accept their black border rather than zooming further in.
+// This may need to be adapted for non EDG maps too.
+static void mapSnapZoomToFitEdg()
+{
+    if (!mapEdgeIsLoaded()) return;
+    if (gIsoZoom >= 1.0f) return;
+
+    float targetZoom = 1.0f; // best-effort fallback
+    for (int i = 0; i < gZoomLadderSize; i++) {
+        float z = gZoomLadder[i];
+        if (z < gIsoZoom) continue;
+        if (z > 1.0f) break;
+        int testW = (int)(screenGetWidth() / z);
+        int testH = (int)(screenGetVisibleHeight() / z);
+        if (mapEdgeViewportFitsInAnyZone(gElevation, testW, testH)) {
+            targetZoom = z;
+            break;
+        }
+    }
+
+    if (targetZoom != gIsoZoom) {
+        gIsoZoom = targetZoom;
+        isoComputeCrop();
+    }
+}
+
 // map_set_elevation
 // 0x482158
 int mapSetElevation(int elevation)
@@ -471,6 +731,8 @@ int mapSetElevation(int elevation)
     if (gameMouseWasVisible) {
         gameMouseObjectsShow();
     }
+
+    mapSnapZoomToFitEdg();
 
     tile_hires_stencil_on_center_tile_or_elevation_change();
 
@@ -746,6 +1008,7 @@ char* mapGetCityName(int map)
     MessageListItem messageListItem;
 
     if (city >= MOD_AREA_START && city < MOD_AREA_MAX) {
+        // mod path unchanged
         int idx = gModAreaIndex[city];
         if (idx >= 0) {
             const char* modName = wmGetAreaModName(city);
@@ -758,12 +1021,14 @@ char* mapGetCityName(int map)
             }
         }
         return _aErrorF2;
-    } else {
-        // Vanilla area: use original formula (1500 + city)
-        messageListItem.num = 1500 + city;
-        char* name = getmsg(&gMapMessageList, &messageListItem, messageListItem.num);
-        return name ? name : _aErrorF2;
     }
+
+    // Vanilla area: short-name block lives at different offsets in the two games.
+    // F1: {500}..., F2: {1500}...
+    const int base = IS_FALLOUT_1() ? 500 : 1500;
+    messageListItem.num = base + city;
+    char* name = getmsg(&gMapMessageList, &messageListItem, messageListItem.num);
+    return name ? name : _aErrorF2;
 }
 
 // 0x48268C
@@ -814,75 +1079,9 @@ int mapScroll(int dx, int dy)
         return -1;
     }
 
-    if (tileSetCenter(newCenterTile, 0) == -1) {
+    if (tileSetCenter(newCenterTile, TILE_SET_CENTER_REFRESH_WINDOW) == -1) {
         return -1;
     }
-
-    Rect r1;
-    rectCopy(&r1, &gIsoWindowRect);
-
-    Rect r2;
-    rectCopy(&r2, &r1);
-
-    int width = screenGetWidth();
-    int pitch = width;
-    int height = screenGetVisibleHeight();
-
-    if (screenDx != 0) {
-        width -= 32;
-    }
-
-    if (screenDy != 0) {
-        height -= 24;
-    }
-
-    if (screenDx < 0) {
-        r2.right = r2.left - screenDx;
-    } else {
-        r2.left = r2.right - screenDx;
-    }
-
-    unsigned char* src;
-    unsigned char* dest;
-    int step;
-    if (screenDy < 0) {
-        r1.bottom = r1.top - screenDy;
-        src = gIsoWindowBuffer + pitch * (height - 1);
-        dest = gIsoWindowBuffer + pitch * (screenGetVisibleHeight() - 1);
-        if (screenDx < 0) {
-            dest -= screenDx;
-        } else {
-            src += screenDx;
-        }
-        step = -pitch;
-    } else {
-        r1.top = r1.bottom - screenDy;
-        dest = gIsoWindowBuffer;
-        src = gIsoWindowBuffer + pitch * screenDy;
-
-        if (screenDx < 0) {
-            dest -= screenDx;
-        } else {
-            src += screenDx;
-        }
-        step = pitch;
-    }
-
-    for (int y = 0; y < height; y++) {
-        memmove(dest, src, width);
-        dest += step;
-        src += step;
-    }
-
-    if (screenDx != 0) {
-        _map_scroll_refresh(&r2);
-    }
-
-    if (screenDy != 0) {
-        _map_scroll_refresh(&r1);
-    }
-
-    windowRefresh(gIsoWindow);
 
     return 0;
 }
@@ -924,6 +1123,7 @@ void mapNewMap()
     gMapHeader.enteringTile = 20100;
     _obj_remove_all();
     animationStop();
+    mapEdgeFree();
 
     // NOTE: Uninline.
     mapGlobalVariablesFree();
@@ -1051,7 +1251,7 @@ static int mapLoad(File* stream)
         0,
         windowGetWidth(gIsoWindow),
         windowGetHeight(gIsoWindow),
-        _colorTable[0]);
+        _colorTable[COL_BLACK]);
     windowRefresh(gIsoWindow);
     animationStop();
     scriptsDisable();
@@ -1074,6 +1274,8 @@ static int mapLoad(File* stream)
     if (gMapHeader.version != 19 && gMapHeader.version != 20) {
         goto err;
     }
+
+    mapEdgeLoad(gMapHeader.name);
 
     if (gEnteringElevation == -1) {
         // Keep the rotation that was requested from the world map (if any)
@@ -1145,6 +1347,9 @@ static int mapLoad(File* stream)
         goto err;
     }
 
+    // unhide any NPCs left with OBJECT_GHOST_HIDDEN
+    animationUnhideGhosts();
+
     if ((gMapHeader.flags & 1) == 0) {
         _map_fix_critter_combat_data();
     }
@@ -1209,20 +1414,24 @@ static int mapLoad(File* stream)
         object->id = scriptsNewObjectId();
         script->ownerId = object->id;
         script->owner = object;
-        _scr_spatials_disable();
-        scriptExecProc(gMapSid, SCRIPT_PROC_MAP_ENTER);
-        _scr_spatials_enable();
 
-        error = "Error Setting up random encounter";
-        if (wmSetupRandomEncounter() == -1) {
-            goto err;
+        if (!gSuppressMapEnterScript) {
+            _scr_spatials_disable();
+            scriptExecProc(gMapSid, SCRIPT_PROC_MAP_ENTER);
+            _scr_spatials_enable();
+
+            error = "Error Setting up random encounter";
+            if (wmSetupRandomEncounter() == -1) {
+                goto err;
+            }
         }
     }
+    gSuppressMapEnterScript = false;
 
     error = nullptr;
 
 err:
-
+    gSuppressMapEnterScript = false;
     if (error != nullptr) {
         char message[100]; // TODO: Size is probably wrong.
         snprintf(message, sizeof(message), "%s while loading map.", error);
@@ -1354,10 +1563,10 @@ static int _map_age_dead_critters()
     }
 
     int agingType;
-    if (hoursSinceLastVisit > 6 * 24) {
-        agingType = 1;
-    } else if (hoursSinceLastVisit > 14 * 24) {
+    if (hoursSinceLastVisit > 21 * 24) {
         agingType = 2;
+    } else if (hoursSinceLastVisit > 14 * 24) {
+        agingType = 1;
     } else {
         return 0;
     }
@@ -1371,7 +1580,7 @@ static int _map_age_dead_critters()
         int type = PID_TYPE(obj->pid);
         if (type == OBJ_TYPE_CRITTER) {
             if (obj != gDude && critterIsDead(obj)) {
-                if (critterGetKillType(obj) != KILL_TYPE_ROBOT && !critterFlagCheck(obj->pid, CRITTER_NO_HEAL)) {
+                if (critterGetKillType(obj) != KILL_TYPE_ROBOT && !critterFlagCheck(obj->pid, CRITTER_NO_AGE)) {
                     objects[count++] = obj;
 
                     if (count >= capacity) {
@@ -1384,7 +1593,7 @@ static int _map_age_dead_critters()
                     }
                 }
             }
-        } else if (agingType == 2 && type == OBJ_TYPE_MISC && obj->pid == 0x500000B) {
+        } else if (agingType == 2 && type == OBJ_TYPE_MISC && obj->fid == 0x500000B) {
             objects[count++] = obj;
             if (count >= capacity) {
                 capacity *= 2;
@@ -1456,6 +1665,9 @@ int mapSetTransition(MapTransition* transition)
         return -1;
     }
 
+    // unhide any stray NPCs left with OBJECT_GHOST_HIDDEN
+    animationUnhideGhosts();
+
     memcpy(&gMapTransition, transition, sizeof(gMapTransition));
 
     if (gMapTransition.map == 0) {
@@ -1519,7 +1731,7 @@ int mapHandleTransition()
 
             memset(&gMapTransition, 0, sizeof(gMapTransition));
 
-            int city;
+            int city = -1;
             wmMatchAreaContainingMapIdx(gMapHeader.index, &city);
             if (wmTeleportToArea(city) == -1) {
                 debugPrint("\nError: couldn't make jump on worldmap for map jump!");
@@ -1654,12 +1866,12 @@ static int _map_save_file(File* stream)
 
     if (scriptSaveAll(stream) == -1) {
         snprintf(err, sizeof(err), "Error saving scripts in %s", gMapHeader.name);
-        _win_msg(err, 80, 80, _colorTable[31744]);
+        _win_msg(err, 80, 80, _colorTable[COL_PURE_RED]);
     }
 
     if (objectSaveAll(stream) == -1) {
         snprintf(err, sizeof(err), "Error saving objects in %s", gMapHeader.name);
-        _win_msg(err, 80, 80, _colorTable[31744]);
+        _win_msg(err, 80, 80, _colorTable[COL_PURE_RED]);
     }
 
     scriptsEnable();
@@ -1802,13 +2014,75 @@ static void loadModMapMessages()
     }
 }
 
-// 0x483ED0
-static void isoWindowRefreshRect(Rect* rect)
+static void isoUpdateColMaps()
 {
-    windowRefreshRect(gIsoWindow, rect);
+    int dstW = screenGetWidth();
+    int dstH = screenGetVisibleHeight();
+
+    if (gIsoColMapW == dstW && gIsoColMapH == dstH
+        && gIsoColMapVirtualW == gIsoCropW && gIsoColMapVirtualH == gIsoCropH
+        && gIsoColMapCropX == gIsoCropX && gIsoColMapCropY == gIsoCropY) {
+        return;
+    }
+
+    if (gIsoColMapX) {
+        free(gIsoColMapX);
+        gIsoColMapX = nullptr;
+    }
+    if (gIsoColMapY) {
+        free(gIsoColMapY);
+        gIsoColMapY = nullptr;
+    }
+
+    gIsoColMapW = dstW;
+    gIsoColMapH = dstH;
+    gIsoColMapVirtualW = gIsoCropW;
+    gIsoColMapVirtualH = gIsoCropH;
+    gIsoColMapCropX = gIsoCropX;
+    gIsoColMapCropY = gIsoCropY;
+
+    gIsoColMapX = (int*)malloc(sizeof(int) * dstW);
+    gIsoColMapY = (int*)malloc(sizeof(int) * dstH);
+
+    for (int x = 0; x < dstW; x++) {
+        int sx = gIsoCropX + (int)((long long)x * gIsoCropW / dstW);
+        if (sx < 0) sx = 0;
+        if (sx >= gIsoVirtualWidth) sx = gIsoVirtualWidth - 1;
+        gIsoColMapX[x] = sx;
+    }
+    for (int y = 0; y < dstH; y++) {
+        int sy = gIsoCropY + (int)((long long)y * gIsoCropH / dstH);
+        if (sy < 0) sy = 0;
+        if (sy >= gIsoVirtualHeight) sy = gIsoVirtualHeight - 1;
+        gIsoColMapY[y] = sy;
+    }
 }
 
-// 0x483EE4
+static void isoBlitVirtualToWindow(Rect* rect)
+{
+    (void)rect; // rect is in virtual coords; scaled path always does a full frame.
+
+    int dstW = screenGetWidth();
+    int dstH = screenGetVisibleHeight();
+
+    isoUpdateColMaps();
+
+    for (int y = 0; y < dstH; y++) {
+        const unsigned char* srcRow = gIsoVirtualBuffer + gIsoColMapY[y] * gIsoVirtualWidth;
+        unsigned char* dstRow = gIsoWindowBuffer + y * dstW;
+        for (int x = 0; x < dstW; x++) {
+            dstRow[x] = srcRow[gIsoColMapX[x]];
+        }
+    }
+}
+
+static void isoWindowRefreshRect(Rect* rect)
+{
+    (void)rect;
+    isoBlitVirtualToWindow(nullptr);
+    windowRefreshRect(gIsoWindow, &gIsoWindowRect);
+}
+
 static void isoWindowRefreshRectGame(Rect* rect)
 {
     Rect rectToUpdate;
@@ -1816,12 +2090,10 @@ static void isoWindowRefreshRectGame(Rect* rect)
         return;
     }
 
-    // CE: Clear dirty rect to prevent most of the visual artifacts near map
-    // edges.
-    bufferFill(gIsoWindowBuffer + rectToUpdate.top * rectGetWidth(&gIsoWindowRect) + rectToUpdate.left,
+    bufferFill(gIsoVirtualBuffer + rectToUpdate.top * gIsoVirtualWidth + rectToUpdate.left,
         rectGetWidth(&rectToUpdate),
         rectGetHeight(&rectToUpdate),
-        rectGetWidth(&gIsoWindowRect),
+        gIsoVirtualWidth,
         0);
 
     tileRenderFloorsInRect(&rectToUpdate, gElevation);
@@ -1829,7 +2101,11 @@ static void isoWindowRefreshRectGame(Rect* rect)
     tileRenderRoofsInRect(&rectToUpdate, gElevation);
     _obj_render_post_roof(&rectToUpdate, gElevation);
 
-    tile_hires_stencil_draw(&rectToUpdate, gIsoWindowBuffer, rectGetWidth(&gIsoWindowRect), rectGetHeight(&gIsoWindowRect));
+    tile_hires_stencil_draw(&rectToUpdate, gIsoVirtualBuffer, gIsoVirtualWidth, gIsoVirtualHeight);
+
+    if (gIsoZoom != 1.0f) {
+        isoBlitVirtualToWindow(nullptr);
+    }
 }
 
 // 0x483F44

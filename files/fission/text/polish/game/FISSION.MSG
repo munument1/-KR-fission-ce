@@ -5,6 +5,13 @@
 # Windows 1250 encoding
 # ±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±
 
+{33}{}{Twoja oferta jest obraŸliwa.}
+{34}{}{B¹dŸmy powa¿ni.}
+{35}{}{Prawie dobiliœmy targu...}
+
+{36}{}{Najpierw wy³¹cz ten gad¿et. Potem przejdziemy do interesów.}
+{37}{}{Nie handlujê takimi gad¿etami. Zabierz to ze sto³u.}
+
 #
 # Preferences
 #
@@ -67,7 +74,7 @@
 
 {300}{}{F.I.S.S.I.O.N.}
 {301}{}{Fleksyjny Izometryczny System Symulacji}
-{302}{}{Interaktywnego Otwartego Nuklearnego?œwiata}
+{302}{}{Interaktywnego Otwartego Nuklearnego-œwiata}
 
 #
 # Sort Context Menu
