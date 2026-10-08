@@ -17,7 +17,7 @@ jobs:
       - name: Rebuild and verify localized DAT
         run: python tools/build_fission_dat.py --output os/macos/fission.dat
       - name: Configure Windows x64
-        run: cmake -S . -B build-korean -A x64 -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S . -B build-korean -A x64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded -DSDL_FORCE_STATIC_VCRT=ON
       - name: Build Windows x64
         run: cmake --build build-korean --config Release --parallel 4
       - name: Assemble Korean package

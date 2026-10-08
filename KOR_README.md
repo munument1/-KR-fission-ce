@@ -5,7 +5,7 @@
 # Fallout: F.I.S.S.I.O.N.
 *Flexible Isometric Simulation System for Interactive Open‑world Nuclear‑roleplaying (상호작용형 오픈월드 핵-롤플레잉을 위한 유연한 등각 투영 시뮬레이션 시스템)*
 
-Fallout: F.I.S.S.I.O.N.은 [Fallout2-CE](https://github.com/alexbatalov/fallout2-ce)에서 포크된 차세대 크로스 플랫폼 폴아웃 1 & 2 재구현 프로젝트입니다. 원작의 쿼터뷰(등각 투영) 턴제 게임플레이를 그대로 보존하면서 모딩 확장성, 와이드스크린 지원, 그리고 커뮤니티 주도의 진정한 확장성을 더했습니다. Windows, Linux, macOS, Android, iOS는 물론 브라우저에서도 실행할 수 있습니다. 현재 한국어 호환 릴리즈는 Fission CE `beta-0.9.7.4` 기준입니다.
+Fallout: F.I.S.S.I.O.N.은 [Fallout2-CE](https://github.com/alexbatalov/fallout2-ce)에서 포크된 차세대 크로스 플랫폼 폴아웃 1 & 2 재구현 프로젝트입니다. 원작의 쿼터뷰(등각 투영) 턴제 게임플레이를 그대로 보존하면서 모딩 확장성, 와이드스크린 지원, 그리고 커뮤니티 주도의 진정한 확장성을 더했습니다. Windows, Linux, macOS, Android, iOS는 물론 브라우저에서도 실행할 수 있습니다. 현재 한국어 호환 릴리즈는 Fission CE `beta-0.9.7.7` 기준입니다.
 
 > **F.I.S.S.I.O.N. 엔진 구동**
 > *Flexible(유연하고). Isometric(쿼터뷰 방식의). Simulation(시뮬레이션). System(시스템을 갖춘). Interactive(상호작용형). Open‑world(오픈월드). Nuclear‑roleplay(핵-롤플레잉).*
@@ -73,7 +73,7 @@ Fallout: F.I.S.S.I.O.N.은 [Fallout2-CE](https://github.com/alexbatalov/fallout2
 
 ### 빠른 설치
 1. **지원되는 폴아웃 1 또는 폴아웃 2 설치본이 정상적으로 작동하는지 확인합니다.**
-2. 최신 [F.I.S.S.I.O.N. 릴리스](https://github.com/cambragol/fission-ce/releases)를 **다운로드**합니다.
+2. 최신 [F.I.S.S.I.O.N. 한국어 릴리스](https://github.com/munument1/-KR-fission-ce/releases)를 **다운로드**합니다.
 3. 다운로드한 F.I.S.S.I.O.N. 파일들을 폴아웃 2 설치 폴더에 **압축 해제**합니다.
 4. 한국어 Windows 빌드에서는 `fallout-fission-x64.exe`를 **실행**합니다.
 
