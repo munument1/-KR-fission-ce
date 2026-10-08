@@ -1,0 +1,57 @@
+name: Verified Korean Windows release
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/korean-windows-release.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  windows:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Rebuild and verify localized DAT
+        run: python tools/build_fission_dat.py --output os/macos/fission.dat
+      - name: Configure Windows x64
+        run: cmake -S . -B build-korean -A x64 -DCMAKE_BUILD_TYPE=Release
+      - name: Build Windows x64
+        run: cmake --build build-korean --config Release --parallel 4
+      - name: Assemble Korean package
+        shell: pwsh
+        run: |
+          $package = 'Fallout-Fission-beta-0.9.7.7-korean.1-Windows-x64'
+          New-Item -ItemType Directory -Path "$package/fonts" -Force
+          Copy-Item build-korean/Release/fallout-fission-x64.exe "$package/"
+          Copy-Item os/macos/fission.dat "$package/"
+          Copy-Item files/fonts/* "$package/fonts/"
+          Copy-Item GDI_FONT_PRESET.cfg "$package/fission.cfg"
+          Copy-Item KOR_README.md "$package/"
+          Compress-Archive -Path $package -DestinationPath "$package.zip"
+          python -c "import zipfile; z=zipfile.ZipFile('$package.zip'); assert z.testzip() is None; assert len({n.split('/')[0] for n in z.namelist()})==1; assert any(n.endswith('fallout-fission-x64.exe') for n in z.namelist()); assert any(n.endswith('fission.dat') for n in z.namelist()); assert any(n.endswith('NanumBarunGothic.ttf') for n in z.namelist())"
+          (Get-FileHash "$package.zip" -Algorithm SHA256).Hash.ToLower() + "  $package.zip" | Out-File SHA256SUMS.txt -Encoding ascii
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Korean-Windows-verified
+          path: |
+            Fallout-Fission-beta-0.9.7.7-korean.1-Windows-x64.zip
+            SHA256SUMS.txt
+          if-no-files-found: error
+      - name: Publish verified prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: beta-0.9.7.7-korean.1
+          target_commitish: ${{ github.sha }}
+          name: Fallout Fission 한국어판 beta-0.9.7.7-korean.1
+          prerelease: true
+          files: |
+            Fallout-Fission-beta-0.9.7.7-korean.1-Windows-x64.zip
+            SHA256SUMS.txt
+          body: |
+            공식 upstream 5056bfbe65f318f2b476321e9120858b4e1e6b4a까지 46개 커밋 반영.
+            부드러운 스크롤과 확대/축소, 최신 옵션 구조를 반영하고 한국어 GDI 폰트 지원을 유지했습니다.
+            새 확대/축소 메시지를 번역했습니다. 한국어 DAT를 재구축하고 모든 항목의 바이트 일치를 검증한 후 Windows x64 빌드와 ZIP 무결성을 확인했습니다.
+            원본 Fallout 게임 데이터는 포함하지 않습니다. 패키지 fission.cfg는 한국어 폰트 설정 예시이므로 기존 개인 설정과 합쳐 사용하세요.
