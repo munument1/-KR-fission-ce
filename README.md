@@ -15,7 +15,7 @@ Fallout: F.I.S.S.I.O.N.은 [Fallout2-CE](https://github.com/alexbatalov/fallout2
 
 ## 한국어 호환성 포크
 
-이 포크에는 Windows 환경에서 한국어를 사용하기 위한 호환성 작업이 포함되어 있습니다. 현재 한국어 릴리즈는 Fission CE `beta-0.9.7.4`를 기준으로 하며, 레거시 코드페이지/GDI 및 TTF 폰트 렌더링과 한국어 UI 리소스를 포함합니다.
+이 포크에는 Windows 환경에서 한국어를 사용하기 위한 호환성 작업이 포함되어 있습니다. 현재 소스는 Fission CE `beta-0.9.7.7` 이후 upstream `5056bfb`까지 동기화했으며, 레거시 코드페이지/GDI 및 TTF 폰트 렌더링과 한국어 UI 리소스를 포함합니다.
 
 - 한국어 버전 가이드: [KOR_README.md](KOR_README.md)
 - 한국어 호환성 참고 사항: [KOREAN_COMPATIBILITY.md](KOREAN_COMPATIBILITY.md)
@@ -30,6 +30,7 @@ Fallout: F.I.S.S.I.O.N.은 [Fallout2-CE](https://github.com/alexbatalov/fallout2
 - **와이드스크린 및 고해상도 스케일링**: 픽셀 단위의 화면비 보존
 - **모듈식 커스터마이징 시스템**: 커뮤니티 모드를 자연스럽게 연동
 - **원본 Fallout 1 & 2 애셋과 100% 호환**: Fission CE 0.9.7 계열부터 Fallout 1 실행 지원
+- **선택 가능한 편의 기능**: 부드러운 스크롤·줌과 홀로디스크 음성 재생 등
 - **미래 확장성**: 새 콘텐츠와 Fallout 2 통합을 쉽게 확장할 수 있는 구조
 
 ---

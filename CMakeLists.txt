@@ -284,8 +284,8 @@ target_sources(${EXECUTABLE_NAME} PUBLIC
     "src/preferences.h"
     "src/settings.cc"
     "src/settings.h"
-    "src/sfall_config.cc"
-    "src/sfall_config.h"
+    "src/mod_config.cc"
+    "src/mod_config.h"
     "src/sfall_ext.cc"
     "src/sfall_ext.h"
     "src/sfall_global_vars.cc"
@@ -317,6 +317,16 @@ if(IOS)
         "src/platform/ios/paths.h"
         "src/platform/ios/paths.mm"
     )
+endif()
+
+if(APPLE AND NOT IOS)
+    target_sources(${EXECUTABLE_NAME} PUBLIC
+        "src/platform/macos/pinch.h"
+        "src/platform/macos/pinch.mm"
+    )
+    target_include_directories(${EXECUTABLE_NAME} PRIVATE "src")
+    target_compile_definitions(${EXECUTABLE_NAME} PUBLIC HAVE_MACOS_PINCH)
+    target_link_libraries(${EXECUTABLE_NAME} "-framework Cocoa")
 endif()
 
 if(WIN32)

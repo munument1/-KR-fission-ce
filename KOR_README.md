@@ -156,7 +156,7 @@ GreenScreens=0
 InventoryFilter=0
 DisplayWeight=0
 CompanionInventory=0
-VockFloats=0
+VockFeatures=0
 
 와이드스크린 해상도만 적용하고 오리지널 Fallout2.exe와 완전히 동일한 바닐라 경험을 원하신다면 `StrictVanilla=1`로 설정하세요.
 
@@ -177,3 +177,7 @@ Fallout2.exe를 리버스 엔지니어링(디컴파일)하여 초기 기틀을 �
 ## 라이선스
 
 본 프로젝트는 [Sustainable Use License](LICENSE.md) 라이선스 하에 배포됩니다.
+
+## upstream 설정 변경 (2026-10-08)
+
+현재 소스 기준은 `5056bfb`입니다. 기존 `[enhancements] VockFloats`는 `VockFeatures`로 변경되었습니다. `[vock-floats]` 섹션은 `[vock-features]`로, `VoicedFloats`는 `FloatAudio`로 변경되었습니다. `TextScramble`과 `PipBoyAudio`는 각각 독립적인 설정이며 홀로디스크 음성은 `sound/pipboy/`에서 읽습니다. 자세한 키와 기본값은 `src/mod_config.h` 및 `documentation/holodisk_mini-guide.md`를 참고하십시오.
