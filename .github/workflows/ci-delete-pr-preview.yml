@@ -13,19 +13,37 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Check whether gh-pages exists
+        id: pages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh api "repos/${{ github.repository }}/branches/gh-pages" > /dev/null 2> /tmp/gh-pages-error; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          elif grep -q 'HTTP 404' /tmp/gh-pages-error; then
+            echo "No gh-pages branch; no PR preview to remove"
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          else
+            cat /tmp/gh-pages-error >&2
+            exit 1
+          fi
+
       - name: Checkout gh-pages branch
+        if: steps.pages.outputs.exists == 'true'
         uses: actions/checkout@v4
         with:
           ref: gh-pages
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Remove PR preview folder
+        if: steps.pages.outputs.exists == 'true'
         run: |
           PR_FOLDER="PR-${{ github.event.pull_request.number }}"
           echo "Removing preview folder: $PR_FOLDER"
           git rm -r --ignore-unmatch "$PR_FOLDER" || true
 
       - name: Commit and push changes
+        if: steps.pages.outputs.exists == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -41,6 +59,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
-            git commit --amend -m "🚮 Remove preview for closed PR #${{ github.event.pull_request.number }}"
-            git push --force
+            git commit -m "Remove preview for closed PR #${{ github.event.pull_request.number }}"
+            git push origin HEAD:gh-pages
           fi
