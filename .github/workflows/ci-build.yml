@@ -26,12 +26,12 @@ jobs:
     steps:
       - name: Clone
         uses: actions/checkout@v4
-
-      - name: Rebuild and verify localized Fission resources
-        run: python tools/build_fission_dat.py --output os/macos/fission.dat
         with:
           fetch-depth: 0
           fetch-tags: true
+
+      - name: Rebuild and verify localized Fission resources
+        run: python tools/build_fission_dat.py --output os/macos/fission.dat
 
       - name: Check for skip-release label on associated PR
         id: check-skip
