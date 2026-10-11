@@ -197,7 +197,7 @@ jobs:
       - name: Build
         run: |
           cd os/android
-          ./gradlew assembleDebug
+          bash ./gradlew assembleDebug
 
       - name: Change apk file name
         run: |
@@ -501,10 +501,6 @@ jobs:
         run: |
           call "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\Common7\Tools\VsDevCmd.bat" ^
           && cmake --build --preset windows-${{ matrix.arch }}-release
-
-      - name: Change executable file name
-        run: |
-          mv out/build/windows-${{ matrix.arch }}/RelWithDebInfo/fallout2-ce.exe out/build/windows-${{ matrix.arch }}/RelWithDebInfo/fallout-fission-${{ matrix.arch }}.exe
 
       - name: Package Windows ${{ matrix.arch }} with fission.dat
         shell: cmd
