@@ -15,7 +15,7 @@ Fallout: F.I.S.S.I.O.N.은 [Fallout2-CE](https://github.com/alexbatalov/fallout2
 
 ## 한국어 호환성 포크
 
-이 포크에는 Windows 환경에서 한국어를 사용하기 위한 호환성 작업이 포함되어 있습니다. 현재 소스는 Fission CE `beta-0.9.7.7` 이후 upstream `5056bfb`까지 동기화했으며, 레거시 코드페이지/GDI 및 TTF 폰트 렌더링과 한국어 UI 리소스를 포함합니다.
+이 포크에는 Windows 환경에서 한국어를 사용하기 위한 호환성 작업이 포함되어 있습니다. 현재 소스는 Fission CE `beta-0.9.7.7` 이후 upstream `97fd1d5`까지 동기화했으며, 레거시 코드페이지/GDI 및 TTF 폰트 렌더링과 한국어 UI 리소스를 포함합니다.
 
 - 한국어 버전 가이드: [KOR_README.md](KOR_README.md)
 - 한국어 호환성 참고 사항: [KOREAN_COMPATIBILITY.md](KOREAN_COMPATIBILITY.md)
@@ -76,12 +76,15 @@ Fallout: F.I.S.S.I.O.N.은 [Fallout2-CE](https://github.com/alexbatalov/fallout2
 - Fallout: Nevada
 - Fallout: Sonora
 
+**부분적으로 지원됨**:
+- Restoration Project
+
 **아직 지원되지 않으며, 앞으로도 지원되지 않을 수 있음**:
 - Fallout Nevada 또는 Sonora 리팩 버전
-- Restoration Project
 - Fallout: Et Tu
-- Olympus 2207
-- Resurrection, Yesterday (미검증)
+- Olympus 2207 (미검증)
+- Resurrection
+- Yesterday (미검증)
 
 
 ---
