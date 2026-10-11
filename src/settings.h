@@ -134,6 +134,51 @@ struct EnhancementSettings {
     bool vock_features = GAME_CONFIG_DEFAULT_VOCK_FEATURES;
 };
 
+struct FontSettings {
+    // -1 = auto, 0 = disabled, 1 = enabled.
+    int ttf_renderer = 0;
+    // -1 = disabled, 0 = automatic for Korean on Windows, 1 = enabled.
+    // Modelled after the legacy Korean fallout2font.dll.
+    int gdi_renderer = 0;
+    int legacy_codepage = 0;
+    std::string font_path = "fonts/english";
+    std::string fallback_font_path = "data/fonts/english";
+    std::string small_font = "";
+    std::string normal_font = "";
+    std::string large_font = "";
+    std::string bold_font = "";
+    std::string title_font = "";
+    std::string default_font = "";
+    int small_size = 16;
+    int normal_size = 10;
+    int large_size = 17;
+    int bold_size = 13;
+    int title_size = 22;
+    int default_size = 13;
+    int small_line_height = 16;
+    int normal_line_height = 10;
+    int large_line_height = 17;
+    int bold_line_height = 13;
+    int title_line_height = 22;
+    int default_line_height = 13;
+    double width_scale = 1.0;
+    int baseline_offset = 0;
+    bool antialiased = true;
+    std::string gdi_text_face = "Dotum";
+    int gdi_text_size = 11;
+    int gdi_text_weight = 400;
+    int gdi_text_line_height = 11;
+    std::string gdi_button_face = "NanumBarunGothic";
+    int gdi_button_size = 15;
+    int gdi_button_weight = 400;
+    int gdi_button_line_height = 17;
+    std::string gdi_title_face = "NanumBarunGothic";
+    int gdi_title_size = 18;
+    int gdi_title_weight = 400;
+    int gdi_title_line_height = 20;
+    int gdi_binary_threshold = 128;
+};
+
 struct ModSettings {
     std::string dude_native_look_jumpsuit_male = MOD_CONFIG_DEFAULT_DUDE_NATIVE_LOOK_JUMPSUIT_MALE;
     std::string dude_native_look_jumpsuit_female = MOD_CONFIG_DEFAULT_DUDE_NATIVE_LOOK_JUMPSUIT_FEMALE;
@@ -227,6 +272,7 @@ struct Settings {
     MapperSettings mapper;
     GraphicSettings graphics;
     EnhancementSettings enhancements;
+    FontSettings font;
     ModSettings mod_settings;
     ModScriptsSettings mod_scripts;
 };
