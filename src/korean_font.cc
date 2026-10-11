@@ -2,10 +2,10 @@
 #include "../third_party/stb_truetype.h"
 
 #include "korean_font.h"
-#include <vector>
-#include <unordered_map>
-#include <string>
 #include <memory>
+#include <string>
+#include <unordered_map>
+#include <vector>
 #if defined(_WIN32)
 #include <windows.h>
 #else
@@ -23,10 +23,10 @@ namespace fallout {
 
 struct FontConfig {
     std::string filename;
-    float render_size;      // Vertical size for scaling
-    float width_scale;      // Horizontal scale multiplier (e.g. 0.65f for compression)
-    int line_height;        // Height returned to the layout engine
-    int baseline_offset;    // Vertical baseline shift
+    float render_size; // Vertical size for scaling
+    float width_scale; // Horizontal scale multiplier (e.g. 0.65f for compression)
+    int line_height; // Height returned to the layout engine
+    int baseline_offset; // Vertical baseline shift
     bool antialiased;
 };
 
@@ -56,29 +56,30 @@ static std::string fontNameOrFallback(const std::string& filename)
     return filename.empty() ? fallbackFontName() : filename;
 }
 
-static FontConfig getKoreanFontConfig(int font) {
+static FontConfig getKoreanFontConfig(int font)
+{
     switch (font) {
-        case 0:
-        case 100:
-            return makeFontConfig(fontNameOrFallback(settings.font.small_font), settings.font.small_size, settings.font.small_line_height);
+    case 0:
+    case 100:
+        return makeFontConfig(fontNameOrFallback(settings.font.small_font), settings.font.small_size, settings.font.small_line_height);
 
-        case 1:
-        case 101:
-            return makeFontConfig(fontNameOrFallback(settings.font.normal_font), settings.font.normal_size, settings.font.normal_line_height);
+    case 1:
+    case 101:
+        return makeFontConfig(fontNameOrFallback(settings.font.normal_font), settings.font.normal_size, settings.font.normal_line_height);
 
-        case 2:
-        case 102:
-            return makeFontConfig(fontNameOrFallback(settings.font.large_font), settings.font.large_size, settings.font.large_line_height);
+    case 2:
+    case 102:
+        return makeFontConfig(fontNameOrFallback(settings.font.large_font), settings.font.large_size, settings.font.large_line_height);
 
-        case 3:
-        case 103:
-            return makeFontConfig(fontNameOrFallback(settings.font.bold_font), settings.font.bold_size, settings.font.bold_line_height);
+    case 3:
+    case 103:
+        return makeFontConfig(fontNameOrFallback(settings.font.bold_font), settings.font.bold_size, settings.font.bold_line_height);
 
-        case 104:
-            return makeFontConfig(fontNameOrFallback(settings.font.title_font), settings.font.title_size, settings.font.title_line_height);
+    case 104:
+        return makeFontConfig(fontNameOrFallback(settings.font.title_font), settings.font.title_size, settings.font.title_line_height);
 
-        default:
-            return makeFontConfig(fallbackFontName(), settings.font.default_size, settings.font.default_line_height);
+    default:
+        return makeFontConfig(fallbackFontName(), settings.font.default_size, settings.font.default_line_height);
     }
 }
 
@@ -89,7 +90,8 @@ struct LoadedFont {
 
 static std::unordered_map<std::string, std::unique_ptr<LoadedFont>> gLoadedFonts;
 
-static stbtt_fontinfo* getFontInfo(const std::string& filename) {
+static stbtt_fontinfo* getFontInfo(const std::string& filename)
+{
     if (filename.empty()) {
         return nullptr;
     }
@@ -136,24 +138,27 @@ struct GlyphCacheKey {
     int width_scale_key;
     int codepoint;
 
-    bool operator==(const GlyphCacheKey& o) const {
+    bool operator==(const GlyphCacheKey& o) const
+    {
         return filename == o.filename && size_key == o.size_key && width_scale_key == o.width_scale_key && codepoint == o.codepoint;
     }
 };
 
 struct GlyphCacheKeyHash {
-    size_t operator()(const GlyphCacheKey& k) const {
-        size_t h1 = std::hash<std::string>{}(k.filename);
-        size_t h2 = std::hash<int>{}(k.size_key);
-        size_t h3 = std::hash<int>{}(k.width_scale_key);
-        size_t h4 = std::hash<int>{}(k.codepoint);
+    size_t operator()(const GlyphCacheKey& k) const
+    {
+        size_t h1 = std::hash<std::string> {}(k.filename);
+        size_t h2 = std::hash<int> {}(k.size_key);
+        size_t h3 = std::hash<int> {}(k.width_scale_key);
+        size_t h4 = std::hash<int> {}(k.codepoint);
         return h1 ^ (h2 << 1) ^ (h3 << 2) ^ (h4 << 3);
     }
 };
 
 static std::unordered_map<GlyphCacheKey, CachedGlyph, GlyphCacheKeyHash> gGlyphCache;
 
-static const CachedGlyph* getGlyph(const std::string& filename, float render_size, float width_scale, int codepoint) {
+static const CachedGlyph* getGlyph(const std::string& filename, float render_size, float width_scale, int codepoint)
+{
     if (codepoint < 32 || codepoint == 127) {
         static const CachedGlyph emptyGlyph = { 0, 0, 0, 0, 0, {} };
         return &emptyGlyph;
@@ -161,7 +166,7 @@ static const CachedGlyph* getGlyph(const std::string& filename, float render_siz
 
     int size_key = (int)(render_size * 10.0f);
     int width_scale_key = (int)(width_scale * 100.0f);
-    GlyphCacheKey key{ filename, size_key, width_scale_key, codepoint };
+    GlyphCacheKey key { filename, size_key, width_scale_key, codepoint };
     auto it = gGlyphCache.find(key);
     if (it != gGlyphCache.end()) {
         return &it->second;
@@ -299,7 +304,8 @@ static int legacyBytesToUnicode(const char* bytes, size_t length)
     return static_cast<unsigned char>(bytes[0]);
 }
 
-static std::vector<int> decodeLegacyText(const char* str) {
+static std::vector<int> decodeLegacyText(const char* str)
+{
     std::vector<int> codepoints;
     if (!str) return codepoints;
 
@@ -321,7 +327,8 @@ static std::vector<int> decodeLegacyText(const char* str) {
     return codepoints;
 }
 
-static int legacyToUnicodeChar(int ch) {
+static int legacyToUnicodeChar(int ch)
+{
     if (ch == 0x95) return 0x2022;
     if (ch < 128) return ch;
     if (ch > 255) {
@@ -331,7 +338,8 @@ static int legacyToUnicodeChar(int ch) {
     return ch;
 }
 
-static void koreanFontDrawText(unsigned char* buf, const char* string, int length, int pitch, int color) {
+static void koreanFontDrawText(unsigned char* buf, const char* string, int length, int pitch, int color)
+{
     if ((color & FONT_SHADOW) != 0) {
         color &= ~FONT_SHADOW;
         koreanFontDrawText(buf + pitch + 1, string, length, pitch, (color & ~0xFF) | _colorTable[0]);
@@ -419,12 +427,14 @@ static void koreanFontDrawText(unsigned char* buf, const char* string, int lengt
     }
 }
 
-static int koreanFontGetLineHeight() {
+static int koreanFontGetLineHeight()
+{
     FontConfig cfg = getKoreanFontConfig(gCurrentFont);
     return cfg.line_height;
 }
 
-static int koreanFontGetStringWidth(const char* string) {
+static int koreanFontGetStringWidth(const char* string)
+{
     FontConfig cfg = getKoreanFontConfig(gCurrentFont);
     std::vector<int> codepoints = decodeLegacyText(string);
     int width = 0;
@@ -437,7 +447,8 @@ static int koreanFontGetStringWidth(const char* string) {
     return width;
 }
 
-static int koreanFontGetCharacterWidth(int ch) {
+static int koreanFontGetCharacterWidth(int ch)
+{
     FontConfig cfg = getKoreanFontConfig(gCurrentFont);
     int unicode_cp = legacyToUnicodeChar(ch);
     const auto* cg = getGlyph(cfg.filename, cfg.render_size, cfg.width_scale, unicode_cp);
@@ -447,7 +458,8 @@ static int koreanFontGetCharacterWidth(int ch) {
     return 0;
 }
 
-static int koreanFontGetMonospacedCharacterWidth() {
+static int koreanFontGetMonospacedCharacterWidth()
+{
     FontConfig cfg = getKoreanFontConfig(gCurrentFont);
     const auto* cg = getGlyph(cfg.filename, cfg.render_size, cfg.width_scale, '0');
     if (cg) {
@@ -456,20 +468,24 @@ static int koreanFontGetMonospacedCharacterWidth() {
     return (int)(cfg.render_size * cfg.width_scale);
 }
 
-static int koreanFontGetMonospacedStringWidth(const char* string) {
+static int koreanFontGetMonospacedStringWidth(const char* string)
+{
     std::vector<int> codepoints = decodeLegacyText(string);
     return koreanFontGetMonospacedCharacterWidth() * codepoints.size();
 }
 
-static int koreanFontGetLetterSpacing() {
+static int koreanFontGetLetterSpacing()
+{
     return 0;
 }
 
-static int koreanFontGetBufferSize(const char* string) {
+static int koreanFontGetBufferSize(const char* string)
+{
     return koreanFontGetStringWidth(string) * koreanFontGetLineHeight();
 }
 
-void koreanFontSetCurrent(int font) {
+void koreanFontSetCurrent(int font)
+{
     if (legacyGdiFontsEnabled()) {
         legacyGdiFontSetCurrent(font);
         return;
@@ -485,7 +501,8 @@ void koreanFontSetCurrent(int font) {
     fontGetMonospacedCharacterWidth = koreanFontGetMonospacedCharacterWidth;
 }
 
-bool koreanFontsEnabled() {
+bool koreanFontsEnabled()
+{
     if (legacyGdiFontsEnabled()) {
         return true;
     }
@@ -505,7 +522,8 @@ bool koreanFontsEnabled() {
     return compat_stricmp(settings.system.language.c_str(), "korean") == 0;
 }
 
-int koreanFontGetByteCount(const char* string) {
+int koreanFontGetByteCount(const char* string)
+{
     if (!koreanFontsEnabled() || string == nullptr || *string == '\0') {
         return 1;
     }
@@ -514,7 +532,8 @@ int koreanFontGetByteCount(const char* string) {
     return c >= 0x81 && c <= 0xFE && *(string + 1) != '\0' ? 2 : 1;
 }
 
-void koreanFontsExit() {
+void koreanFontsExit()
+{
     legacyGdiFontsExit();
     gLoadedFonts.clear();
     gGlyphCache.clear();
