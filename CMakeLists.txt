@@ -239,6 +239,10 @@ target_sources(${EXECUTABLE_NAME} PUBLIC
     "src/svga.h"
     "src/text_font.cc"
     "src/text_font.h"
+    "src/korean_font.cc"
+    "src/korean_font.h"
+    "src/legacy_gdi_font.cc"
+    "src/legacy_gdi_font.h"
     "src/text_object.cc"
     "src/text_object.h"
     "src/tile.cc"
@@ -342,6 +346,7 @@ endif()
 
 if(WIN32)
     target_link_libraries(${EXECUTABLE_NAME}
+        gdi32
         winmm
         debug libcpmtd
         optimized libcpmt
@@ -353,6 +358,12 @@ if(WIN32)
         "os/windows/fission.ico"
         "os/windows/fission.rc"
     )
+
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set_target_properties(${EXECUTABLE_NAME} PROPERTIES OUTPUT_NAME "fallout-fission-x64")
+    else()
+        set_target_properties(${EXECUTABLE_NAME} PROPERTIES OUTPUT_NAME "fallout-fission-x86")
+    endif()
 endif()
 
 if(APPLE)
